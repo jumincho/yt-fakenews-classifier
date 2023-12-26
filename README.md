@@ -5,8 +5,8 @@ Youtube 동영상 자막 크롤링
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
-
+&nbsp;
 ![image](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/5a768320-1e11-49fb-ac50-d6a0d2b36fba)
 
-
+&nbsp;
 ![image](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/346ec64d-380b-4982-bdd8-d3bd0135127f)
