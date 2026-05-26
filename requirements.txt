@@ -1,0 +1,17 @@
+# 01_subtitle_extraction.ipynb
+# WhisperX는 git에서 직접 설치 (노트북 셀 참고)
+yt-dlp
+ffmpeg-python
+
+# 02_fake_news_classification.ipynb
+torch
+torchaudio
+tensorflow
+transformers
+accelerate
+datasets
+evaluate
+scikit-learn
+pandas
+numpy
+sentencepiece

@@ -1,0 +1,18 @@
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Colab/notebook artifacts
+output/
+logs/
+wandb/
+whisper-env/
+youtubeaudio/
+*.mp3
+*.srt
+audio.*
+
+# Local data extracted from dataset.zip
+data/fake_or_real_news.csv
+fake_or_real_news.csv
