@@ -1,17 +1,26 @@
-# 01_subtitle_extraction.ipynb
-# WhisperX는 git에서 직접 설치 (노트북 셀 참고)
-yt-dlp
-ffmpeg-python
+# ─────────────────────────────────────────────────────────────────────────
+# 두 노트북은 서로 다른 환경에서 동작합니다.
+#
+# 01_subtitle_extraction.ipynb : WhisperX 가 요구하는 구버전 torch (1.13.1).
+#   노트북 셀이 직접 가상환경 (whisper-env) 을 만들고 거기에 설치합니다.
+#   → 이 requirements.txt 에는 포함하지 않습니다 (시스템 토치와 충돌).
+#
+# 02_fake_news_classification.ipynb : 최신 transformers / datasets.
+#   → 아래 패키지 목록.
+# ─────────────────────────────────────────────────────────────────────────
 
-# 02_fake_news_classification.ipynb
-torch
-torchaudio
-tensorflow
-transformers
-accelerate
-datasets
-evaluate
+# Notebook 01 에서 별도 셀로 설치 (참고용 주석)
+# yt-dlp
+# ffmpeg-python
+# whisperx @ git+https://github.com/m-bain/whisperx.git@v2.0.1
+
+# Notebook 02 — transformers / datasets / evaluate 의 API 변경 영향을 받아 핀.
+torch>=2.0
+transformers>=4.36,<4.46
+datasets>=2.14,<3.0
+accelerate>=0.25
+evaluate>=0.4
+sentencepiece
 scikit-learn
 pandas
 numpy
-sentencepiece
