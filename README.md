@@ -88,7 +88,7 @@ XLM-RoBERTa 분류기 → REAL / FAKE
   </a>
 
 런타임 유형은 **GPU (T4)** 가 권장됩니다. 학습 데이터(`fake_or_real_news.csv`)는
-`data/dataset.zip` 압축을 풀거나, Colab 세션에 직접 업로드하면 됩니다.
+`data/dataset.zip` 만 두면 노트북이 첫 셀에서 자동으로 풀어 사용합니다. Colab 환경에서는 `dataset.zip` 또는 `fake_or_real_news.csv` 를 세션에 업로드해도 됩니다.
 
 ### 2. 로컬에서 실행
 
@@ -195,7 +195,7 @@ XLM-RoBERTa classifier → REAL / FAKE
   </a>
 
 A GPU runtime (T4) is recommended. Training data (`fake_or_real_news.csv`) ships as
-`data/dataset.zip`; unzip locally or upload directly to the Colab session.
+`data/dataset.zip`; the notebook auto-unzips it on first run. In Colab, uploading either `dataset.zip` or the raw `fake_or_real_news.csv` to the session works.
 
 #### 2. Local
 
