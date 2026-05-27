@@ -1,4 +1,23 @@
-# YouTube Fake News Detector
+<div align="center">
+
+# yt-fakenews-classifier
+
+**YouTube 자막을 추출해 가짜뉴스 여부를 판별하는 NLP 파이프라인**
+**NLP pipeline that pulls YouTube captions and labels them REAL / FAKE**
+
+![Language](https://img.shields.io/badge/language-Python%203.10-3776AB?logo=python&logoColor=white)
+![Framework](https://img.shields.io/badge/framework-PyTorch%20%2B%20Transformers-EE4C2C?logo=pytorch&logoColor=white)
+![Model](https://img.shields.io/badge/model-XLM--RoBERTa-FFD43B?logo=huggingface&logoColor=black)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Year](https://img.shields.io/badge/year-2023-blue)
+
+**한국어** · [English](#english)
+
+</div>
+
+---
+
+## 개요
 
 > YouTube 동영상의 자막을 추출하고, 그 내용을 가짜뉴스인지 자동으로 판별하는 NLP 파이프라인
 
@@ -60,22 +79,22 @@ XLM-RoBERTa 분류기 → REAL / FAKE
 각 노트북을 Colab에서 바로 열 수 있습니다.
 
 - 자막 추출:
-  <a target="_blank" href="https://colab.research.google.com/github/jumincho/youtube-fake-news-detector/blob/main/notebooks/01_subtitle_extraction.ipynb">
+  <a target="_blank" href="https://colab.research.google.com/github/jumincho/yt-fakenews-classifier/blob/main/notebooks/01_subtitle_extraction.ipynb">
     <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
   </a>
 - 가짜뉴스 분류:
-  <a target="_blank" href="https://colab.research.google.com/github/jumincho/youtube-fake-news-detector/blob/main/notebooks/02_fake_news_classification.ipynb">
+  <a target="_blank" href="https://colab.research.google.com/github/jumincho/yt-fakenews-classifier/blob/main/notebooks/02_fake_news_classification.ipynb">
     <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
   </a>
 
-런타임 유형은 **GPU (T4)** 로 설정해주세요. 학습 데이터(`fake_or_real_news.csv`)는
+런타임 유형은 **GPU (T4)** 가 권장됩니다. 학습 데이터(`fake_or_real_news.csv`)는
 `data/dataset.zip` 압축을 풀거나, Colab 세션에 직접 업로드하면 됩니다.
 
 ### 2. 로컬에서 실행
 
 ```bash
-git clone https://github.com/jumincho/youtube-fake-news-detector.git
-cd youtube-fake-news-detector
+git clone https://github.com/jumincho/yt-fakenews-classifier.git
+cd yt-fakenews-classifier
 
 # 학습 데이터 압축 해제
 unzip data/dataset.zip -d data/
@@ -101,3 +120,106 @@ jupyter lab notebooks/
 ![010](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/57fb6b07-950d-472b-a9ce-ab30414bd363)
 ![011](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/40f9dab0-8884-45b9-aa6b-147c5125b51f)
 ![013](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/5fd12381-ff93-4d20-9f95-5568f83714e3)
+
+## 라이선스
+
+[MIT License](./LICENSE)
+
+---
+
+<a name="english"></a>
+
+## English
+
+> NLP pipeline that extracts YouTube captions and classifies them as REAL or FAKE news.
+
+Give the pipeline a YouTube URL: it pulls audio, generates captions, then passes the
+text through a multilingual XLM-RoBERTa classifier to get a **REAL / FAKE** label.
+Built as an experiment on whether spoken video content can be evaluated for veracity
+by reducing it to text and applying a fake-news classifier.
+
+### Features
+
+- **Caption-extraction pipeline** — YouTube URL → `yt-dlp` for audio → [WhisperX](https://github.com/m-bain/whisperx) for speech recognition and alignment → `.srt` → cleaned `.txt`.
+- **Fake-news classifier** — fine-tunes `symanto/xlm-roberta-base-snli-mnli-anli-xnli` on the English [Fake or Real News dataset](https://www.kaggle.com/datasets/rajatkumar30/fake-news) for REAL/FAKE binary classification.
+- **Inference** — feeds the extracted caption text into the trained model and outputs a label.
+
+### Pipeline
+
+```
+YouTube URL
+    │
+    ▼  (notebooks/01_subtitle_extraction.ipynb)
+audio (.mp3) → WhisperX → captions (.srt) → cleaned (.txt)
+    │
+    ▼  (notebooks/02_fake_news_classification.ipynb)
+XLM-RoBERTa classifier → REAL / FAKE
+```
+
+### Tech stack
+
+- **Language**: Python 3.10 (Google Colab baseline)
+- **Speech recognition**: [WhisperX](https://github.com/m-bain/whisperx) v2.0.1 (Whisper large-v2 + wav2vec2 alignment)
+- **Audio**: `yt-dlp`, `ffmpeg`
+- **Classifier**: Hugging Face `transformers` — `symanto/xlm-roberta-base-snli-mnli-anli-xnli`
+- **Training**: PyTorch + `Trainer` API, `accelerate`, `evaluate`
+- **Data**: `pandas`, `scikit-learn`, `datasets`
+- **Hardware**: GPU recommended (Colab T4 or similar)
+
+### Layout
+
+```
+.
+├── notebooks/
+│   ├── 01_subtitle_extraction.ipynb       # YouTube URL → .txt captions
+│   └── 02_fake_news_classification.ipynb  # captions .txt → REAL/FAKE prediction
+├── data/
+│   ├── dataset.zip                         # fake_or_real_news.csv (training data, 12MB binary)
+│   └── sample_input.txt                    # sample caption text for inference
+├── requirements.txt
+├── .gitignore
+└── README.md
+```
+
+### Run
+
+#### 1. Google Colab (recommended)
+
+- Caption extraction:
+  <a target="_blank" href="https://colab.research.google.com/github/jumincho/yt-fakenews-classifier/blob/main/notebooks/01_subtitle_extraction.ipynb">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+  </a>
+- Classification:
+  <a target="_blank" href="https://colab.research.google.com/github/jumincho/yt-fakenews-classifier/blob/main/notebooks/02_fake_news_classification.ipynb">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+  </a>
+
+A GPU runtime (T4) is recommended. Training data (`fake_or_real_news.csv`) ships as
+`data/dataset.zip`; unzip locally or upload directly to the Colab session.
+
+#### 2. Local
+
+```bash
+git clone https://github.com/jumincho/yt-fakenews-classifier.git
+cd yt-fakenews-classifier
+
+# unzip training data
+unzip data/dataset.zip -d data/
+
+# install deps (CUDA recommended)
+pip install -r requirements.txt
+pip install git+https://github.com/m-bain/whisperx.git@v2.0.1
+
+# open notebooks in Jupyter
+jupyter lab notebooks/
+```
+
+### Dataset
+
+- **Training**: `fake_or_real_news.csv` inside `data/dataset.zip`
+  (~6,300 English news articles with `title`, `text`, `label(REAL/FAKE)` columns).
+- **Inference example**: `data/sample_input.txt` — caption text from notebook 1, usable as input for notebook 2.
+
+### License
+
+[MIT License](./LICENSE)

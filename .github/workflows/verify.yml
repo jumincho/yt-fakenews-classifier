@@ -1,0 +1,89 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  structure:
+    name: Structure & Notebooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Required files
+        run: |
+          for f in README.md LICENSE requirements.txt; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing required file: $f"
+              exit 1
+            fi
+          done
+
+      - name: Notebooks parse as valid JSON / nbformat
+        run: |
+          pip install -q nbformat
+          python -c "
+          import sys, pathlib, json, nbformat
+          fail = 0
+          for p in pathlib.Path('notebooks').rglob('*.ipynb'):
+              try:
+                  nb = nbformat.read(p, as_version=4)
+                  nbformat.validate(nb)
+                  print(f'ok: {p}')
+              except Exception as e:
+                  print(f'::error file={p}::{e}')
+                  fail += 1
+          sys.exit(fail)
+          "
+
+      - name: Notebook code cells syntax-check
+        run: |
+          pip install -q nbformat
+          python -c "
+          import sys, pathlib, ast, nbformat
+          fail = 0
+          for p in pathlib.Path('notebooks').rglob('*.ipynb'):
+              nb = nbformat.read(p, as_version=4)
+              for i, cell in enumerate(nb.cells):
+                  if cell.cell_type != 'code': continue
+                  src = cell.source
+                  if not src.strip(): continue
+                  # Skip cells with cell magics / line magics
+                  lines = [l for l in src.splitlines() if not l.strip().startswith(('!', '%'))]
+                  if not lines: continue
+                  try:
+                      ast.parse('\n'.join(lines))
+                  except SyntaxError as e:
+                      print(f'::error file={p}::cell {i}: {e}')
+                      fail += 1
+          sys.exit(fail)
+          "
+
+      - name: README internal links resolve
+        run: |
+          missing=0
+          for link in $(grep -oE '\]\([^)]+\)' README.md | sed 's|](||; s|)$||' | grep -v '^http' | grep -v '^#' | sort -u); do
+            path="${link%%#*}"
+            [ -z "$path" ] && continue
+            if [ ! -e "$path" ]; then
+              echo "::warning::README links to missing path: $link"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo "::warning::$missing README link(s) point to non-existent paths"
+          fi
+
+      - name: No committed secrets
+        run: |
+          if grep -rEn 'AIza[0-9A-Za-z_-]{35}|hf_[A-Za-z0-9]{32,}|sk-[A-Za-z0-9]{32,}' notebooks/ 2>/dev/null; then
+            echo "::error::Potential secret detected in tracked notebooks"
+            exit 1
+          fi
