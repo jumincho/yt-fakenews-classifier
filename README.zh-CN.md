@@ -129,6 +129,14 @@ python -m src.predict output/audio.txt --model-dir output/final
 - **训练**: `data/dataset.zip` 内的 `fake_or_real_news.csv` (~6,300 条英文新闻,字段为 `title` · `text` · `label(REAL/FAKE)`)
 - **推理示例**: `data/sample_input.txt` —— notebook 01 产生的字幕文本示例
 
+## 屏幕截图
+
+![008](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/615e65f5-edec-464c-bcd2-a72d8efc989b)
+![009](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/477220aa-c59e-4c3e-8929-7b6923b35394)
+![010](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/57fb6b07-950d-472b-a9ce-ab30414bd363)
+![011](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/40f9dab0-8884-45b9-aa6b-147c5125b51f)
+![013](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/5fd12381-ff93-4d20-9f95-5568f83714e3)
+
 ## 许可证
 
 [MIT License](./LICENSE)
