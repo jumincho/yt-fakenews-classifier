@@ -261,6 +261,14 @@ GPU (CUDA) recommended. ~30 minutes on a T4.
 - **Training**: `fake_or_real_news.csv` inside `data/dataset.zip` (~6,300 English news articles with `title`, `text`, `label(REAL/FAKE)` columns).
 - **Inference example**: `data/sample_input.txt` — a sample caption text produced by notebook 01.
 
+### Screenshots
+
+![008](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/615e65f5-edec-464c-bcd2-a72d8efc989b)
+![009](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/477220aa-c59e-4c3e-8929-7b6923b35394)
+![010](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/57fb6b07-950d-472b-a9ce-ab30414bd363)
+![011](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/40f9dab0-8884-45b9-aa6b-147c5125b51f)
+![013](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/5fd12381-ff93-4d20-9f95-5568f83714e3)
+
 ### License
 
 [MIT License](./LICENSE)
