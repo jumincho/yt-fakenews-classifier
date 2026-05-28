@@ -84,8 +84,19 @@ yt-fakenews-classifier/
 
 ### Google Colab
 
-每个 notebook 都可以直接在 GPU 运行时中打开。在 Colab 中请先 `git clone` 仓库,
-然后从 `notebooks/` 目录打开 (notebook 会从 `src/` 导入代码)。
+每个 notebook 都可以直接在 GPU 运行时中打开。
+
+- 字幕提取:
+  <a target="_blank" href="https://colab.research.google.com/github/jumincho/yt-fakenews-classifier/blob/main/notebooks/01_subtitle_extraction.ipynb">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+  </a>
+- 虚假新闻分类:
+  <a target="_blank" href="https://colab.research.google.com/github/jumincho/yt-fakenews-classifier/blob/main/notebooks/02_fake_news_classification.ipynb">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+  </a>
+
+在 Colab 中请先 `git clone` 仓库,然后从 `notebooks/` 目录打开
+(notebook 会从 `src/` 导入代码)。
 
 ### 本地
 
