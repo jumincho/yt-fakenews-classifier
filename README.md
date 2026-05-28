@@ -11,7 +11,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Year](https://img.shields.io/badge/year-2023-blue)
 
-**한국어** · [English](#english)
+**한국어** · [English](#english) · [中文](./README.zh-CN.md)
 
 </div>
 
@@ -19,54 +19,64 @@
 
 ## 개요
 
-> YouTube 동영상의 자막을 추출하고, 그 내용을 가짜뉴스인지 자동으로 판별하는 NLP 파이프라인
+> YouTube 영상 URL → 자막 텍스트 → REAL/FAKE 라벨
 
-YouTube 영상 URL만 있으면 오디오를 받아 자막을 뽑고, 그 자막 텍스트를 다국어
-XLM-RoBERTa 분류기에 통과시켜 **REAL / FAKE** 라벨을 출력합니다.
-정보의 진위 판단이 점점 어려워지는 영상 콘텐츠 환경에서, 발화 내용을 텍스트로
-바꾸어 가짜뉴스 분류 모델을 적용해본 프로젝트입니다.
-
-## 주요 기능
-
-- **자막 추출 파이프라인** — YouTube URL 입력 → `yt-dlp`로 오디오(.mp3) 다운로드
-  → [WhisperX](https://github.com/m-bain/whisperx)로 음성 인식 및 정렬 → `.srt`
-  → 정제된 `.txt`
-- **가짜뉴스 분류 모델** — 영문 [Fake or Real News 데이터셋](https://www.kaggle.com/datasets/rajatkumar30/fake-news)
-  으로 `symanto/xlm-roberta-base-snli-mnli-anli-xnli`를 파인튜닝, REAL/FAKE 이진 분류
-- **추론** — 추출된 자막 텍스트 파일을 입력으로 받아 학습된 모델이 진위를 예측
+YouTube URL 하나만 있으면 오디오를 받아 자막을 뽑고, 그 자막을 다국어
+XLM-RoBERTa 분류기에 통과시켜 **REAL / FAKE** 라벨을 출력합니다. 영상 콘텐츠의
+발화 내용을 텍스트로 환원한 뒤 가짜뉴스 분류 모델을 적용해 본 학생 프로젝트입니다.
 
 ## 파이프라인
 
 ```
 YouTube URL
     │
-    ▼  (notebooks/01_subtitle_extraction.ipynb)
+    ▼  src/extract_subtitles.py · notebooks/01_subtitle_extraction.ipynb
 오디오(.mp3) → WhisperX → 자막(.srt) → 정제(.txt)
     │
-    ▼  (notebooks/02_fake_news_classification.ipynb)
-XLM-RoBERTa 분류기 → REAL / FAKE
+    ▼  src/train.py · src/predict.py · notebooks/02_fake_news_classification.ipynb
+XLM-RoBERTa (binary head) → REAL / FAKE
 ```
+
+## 두 단계로 나뉘어진 이유
+
+WhisperX는 **torch 1.13.1 (cu117)** 을, 분류기는 **PyTorch ≥ 2.0** 을 요구해서
+같은 환경에서 공존하기 어렵습니다. 그래서 자막 추출 단계는 별도 가상환경
+(`whisper-env`)을 두고 `whisperx` 바이너리를 서브프로세스로 호출하는 형태로
+분리했습니다. 가운데 산출물(`.txt`)이 두 단계를 잇는 인터페이스입니다.
+
+## 주요 기능
+
+- **자막 추출 파이프라인** — `yt-dlp`로 오디오(.mp3) → WhisperX(large-v2 + wav2vec2 alignment)로 `.srt` → 정제된 `.txt`
+- **이진 분류기** — `symanto/xlm-roberta-base-snli-mnli-anli-xnli`의 백본을 그대로 두고 분류 헤드만 2-way로 새로 학습 (`num_labels=2` + `ignore_mismatched_sizes=True`)
+- **노트북 · CLI 동시 지원** — `notebooks/`에서 클릭으로 돌릴 수도 있고, `python -m src.train` / `python -m src.predict` 로 스크립트화도 가능
 
 ## 기술 스택
 
-- **언어**: Python 3.10 (Google Colab 환경 기준)
-- **음성 인식**: [WhisperX](https://github.com/m-bain/whisperx) v2.0.1 (Whisper large-v2 + wav2vec2 alignment)
-- **오디오 처리**: `yt-dlp`, `ffmpeg`
-- **분류 모델**: Hugging Face `transformers` — `symanto/xlm-roberta-base-snli-mnli-anli-xnli`
-- **학습 프레임워크**: PyTorch + `Trainer` API, `accelerate`, `evaluate`
-- **데이터 처리**: `pandas`, `scikit-learn`, `datasets`
+- **언어**: Python 3.10+
+- **음성 인식**: [WhisperX](https://github.com/m-bain/whisperx) v2.0.1 (Whisper large-v2 + wav2vec2 정렬)
+- **오디오 다운로드**: `yt-dlp`, `ffmpeg`
+- **분류**: Hugging Face `transformers` (≥ 4.36, < 4.46), `datasets`, `evaluate`, `accelerate`
+- **학습 프레임워크**: PyTorch ≥ 2.0 + `Trainer`
+- **데이터**: `pandas`, `scikit-learn`
 - **하드웨어**: GPU (Colab T4 등) 권장
 
 ## 프로젝트 구조
 
 ```
-.
+yt-fakenews-classifier/
+├── src/
+│   ├── __init__.py
+│   ├── extract_subtitles.py   # YouTube → mp3 → srt → txt (WhisperX)
+│   ├── data.py                # CSV 로드, NewsDataset, train/val/test 분할
+│   ├── model.py               # 토크나이저 · 분류기 팩토리 (binary head)
+│   ├── train.py               # 학습 파이프라인 (노트북·CLI 공용)
+│   └── predict.py             # 텍스트 파일 추론 (노트북·CLI 공용)
 ├── notebooks/
-│   ├── 01_subtitle_extraction.ipynb       # YouTube URL → .txt 자막
-│   └── 02_fake_news_classification.ipynb  # 자막 .txt → REAL/FAKE 예측
+│   ├── 01_subtitle_extraction.ipynb    # src.extract_subtitles 를 사용하는 진입 노트북
+│   └── 02_fake_news_classification.ipynb # src.train + src.predict 진입 노트북
 ├── data/
-│   ├── dataset.zip                         # fake_or_real_news.csv (학습용, 12MB 바이너리)
-│   └── sample_input.txt                    # 추론 테스트용 예시 자막
+│   ├── dataset.zip            # fake_or_real_news.csv (~6,300건, 학습용)
+│   └── sample_input.txt       # 추론 테스트용 자막 샘플
 ├── requirements.txt
 ├── .gitignore
 └── README.md
@@ -74,9 +84,9 @@ XLM-RoBERTa 분류기 → REAL / FAKE
 
 ## 사용 방법
 
-### 1. Google Colab에서 실행 (권장)
+### Google Colab
 
-각 노트북을 Colab에서 바로 열 수 있습니다.
+각 노트북을 GPU 런타임으로 바로 열 수 있습니다.
 
 - 자막 추출:
   <a target="_blank" href="https://colab.research.google.com/github/jumincho/yt-fakenews-classifier/blob/main/notebooks/01_subtitle_extraction.ipynb">
@@ -87,31 +97,39 @@ XLM-RoBERTa 분류기 → REAL / FAKE
     <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
   </a>
 
-런타임 유형은 **GPU (T4)** 가 권장됩니다. 학습 데이터(`fake_or_real_news.csv`)는
-`data/dataset.zip` 만 두면 노트북이 첫 셀에서 자동으로 풀어 사용합니다. Colab 환경에서는 `dataset.zip` 또는 `fake_or_real_news.csv` 를 세션에 업로드해도 됩니다.
+Colab에서는 저장소를 `git clone`한 뒤 `notebooks/` 안의 파일을 열어 주세요
+(노트북이 `src/` 를 임포트합니다).
 
-### 2. 로컬에서 실행
+### 로컬
 
 ```bash
 git clone https://github.com/jumincho/yt-fakenews-classifier.git
 cd yt-fakenews-classifier
-
-# 학습 데이터 압축 해제
-unzip data/dataset.zip -d data/
-
-# 의존성 설치 (CUDA 가능 환경 권장)
 pip install -r requirements.txt
-pip install git+https://github.com/m-bain/whisperx.git@v2.0.1
 
-# Jupyter에서 노트북 열기
-jupyter lab notebooks/
+# 학습 데이터는 첫 실행 시 dataset.zip 에서 자동 압축 해제됩니다.
+
+# (1) 자막 추출 — WhisperX 가상환경을 한 번 만들고 시작
+virtualenv whisper-env
+whisper-env/bin/pip install --index-url https://download.pytorch.org/whl/cu117 torch==1.13.1 torchaudio==0.13.1
+whisper-env/bin/pip install git+https://github.com/m-bain/whisperx.git@v2.0.1
+export WHISPERX_BIN=$(pwd)/whisper-env/bin/whisperx
+
+python -m src.extract_subtitles "https://www.youtube.com/watch?v=4sC-k-92JBE" --out-dir output
+
+# (2) 분류기 학습
+python -m src.train --epochs 3 --batch-size 8 --seed 42
+
+# (3) 영상 자막에 대해 REAL/FAKE 예측
+python -m src.predict output/audio.txt --model-dir output/final
 ```
+
+GPU (CUDA) 환경 권장. 학습은 T4 기준 약 30분.
 
 ## 데이터셋
 
-- **학습 데이터**: `data/dataset.zip` 안의 `fake_or_real_news.csv`
-  (약 6,300건의 영문 뉴스 기사, `title`, `text`, `label(REAL/FAKE)` 컬럼)
-- **추론 예시**: `data/sample_input.txt` — 노트북 1에서 만들어 노트북 2에 입력으로 넣을 수 있는 자막 텍스트 샘플
+- **학습**: `data/dataset.zip` 안의 `fake_or_real_news.csv` (~6,300건의 영문 뉴스, `title` · `text` · `label(REAL/FAKE)`)
+- **추론 예시**: `data/sample_input.txt` — notebook 01 에서 만들 수 있는 자막 텍스트의 예시
 
 ## 스크린샷
 
@@ -131,51 +149,66 @@ jupyter lab notebooks/
 
 ## English
 
-> NLP pipeline that extracts YouTube captions and classifies them as REAL or FAKE news.
+> NLP pipeline: YouTube URL → caption text → REAL/FAKE label.
 
-Give the pipeline a YouTube URL: it pulls audio, generates captions, then passes the
-text through a multilingual XLM-RoBERTa classifier to get a **REAL / FAKE** label.
-Built as an experiment on whether spoken video content can be evaluated for veracity
-by reducing it to text and applying a fake-news classifier.
-
-### Features
-
-- **Caption-extraction pipeline** — YouTube URL → `yt-dlp` for audio → [WhisperX](https://github.com/m-bain/whisperx) for speech recognition and alignment → `.srt` → cleaned `.txt`.
-- **Fake-news classifier** — fine-tunes `symanto/xlm-roberta-base-snli-mnli-anli-xnli` on the English [Fake or Real News dataset](https://www.kaggle.com/datasets/rajatkumar30/fake-news) for REAL/FAKE binary classification.
-- **Inference** — feeds the extracted caption text into the trained model and outputs a label.
+Give the pipeline a YouTube URL: it pulls audio, generates captions with
+WhisperX, then passes the text through a multilingual XLM-RoBERTa classifier
+with a binary REAL/FAKE head. Built as a student project on whether spoken
+video content can be evaluated for veracity by reducing it to text and applying
+a fake-news classifier.
 
 ### Pipeline
 
 ```
 YouTube URL
     │
-    ▼  (notebooks/01_subtitle_extraction.ipynb)
+    ▼  src/extract_subtitles.py · notebooks/01_subtitle_extraction.ipynb
 audio (.mp3) → WhisperX → captions (.srt) → cleaned (.txt)
     │
-    ▼  (notebooks/02_fake_news_classification.ipynb)
-XLM-RoBERTa classifier → REAL / FAKE
+    ▼  src/train.py · src/predict.py · notebooks/02_fake_news_classification.ipynb
+XLM-RoBERTa (binary head) → REAL / FAKE
 ```
+
+### Why split into two stages
+
+WhisperX needs **torch 1.13.1 (cu117)**; the classifier needs **PyTorch ≥ 2.0**.
+They cannot coexist in one environment, so subtitle extraction lives in a
+separate virtualenv (`whisper-env`) and `whisperx` is invoked as a subprocess.
+The intermediate artifact (the `.txt`) is the interface between the two halves.
+
+### Features
+
+- **Caption-extraction pipeline** — `yt-dlp` for audio → [WhisperX](https://github.com/m-bain/whisperx) v2.0.1 (Whisper large-v2 + wav2vec2 alignment) → cleaned `.txt`.
+- **Binary classifier** — fine-tunes `symanto/xlm-roberta-base-snli-mnli-anli-xnli` with the 3-way NLI head swapped for a freshly initialized 2-way head (`num_labels=2` + `ignore_mismatched_sizes=True`).
+- **Notebook & CLI parity** — every step runs from `notebooks/` or from `python -m src.<step>`.
 
 ### Tech stack
 
-- **Language**: Python 3.10 (Google Colab baseline)
+- **Language**: Python 3.10+
 - **Speech recognition**: [WhisperX](https://github.com/m-bain/whisperx) v2.0.1 (Whisper large-v2 + wav2vec2 alignment)
 - **Audio**: `yt-dlp`, `ffmpeg`
-- **Classifier**: Hugging Face `transformers` — `symanto/xlm-roberta-base-snli-mnli-anli-xnli`
-- **Training**: PyTorch + `Trainer` API, `accelerate`, `evaluate`
-- **Data**: `pandas`, `scikit-learn`, `datasets`
+- **Classifier**: Hugging Face `transformers` (≥ 4.36, < 4.46), `datasets`, `evaluate`, `accelerate`
+- **Training**: PyTorch ≥ 2.0 + `Trainer`
+- **Data**: `pandas`, `scikit-learn`
 - **Hardware**: GPU recommended (Colab T4 or similar)
 
 ### Layout
 
 ```
-.
+yt-fakenews-classifier/
+├── src/
+│   ├── __init__.py
+│   ├── extract_subtitles.py   # YouTube → mp3 → srt → txt (WhisperX)
+│   ├── data.py                # CSV load, NewsDataset, train/val/test split
+│   ├── model.py               # tokenizer / classifier factory (binary head)
+│   ├── train.py               # training pipeline (notebook & CLI)
+│   └── predict.py             # text-file inference (notebook & CLI)
 ├── notebooks/
-│   ├── 01_subtitle_extraction.ipynb       # YouTube URL → .txt captions
-│   └── 02_fake_news_classification.ipynb  # captions .txt → REAL/FAKE prediction
+│   ├── 01_subtitle_extraction.ipynb    # src.extract_subtitles entry notebook
+│   └── 02_fake_news_classification.ipynb # src.train + src.predict entry notebook
 ├── data/
-│   ├── dataset.zip                         # fake_or_real_news.csv (training data, 12MB binary)
-│   └── sample_input.txt                    # sample caption text for inference
+│   ├── dataset.zip            # fake_or_real_news.csv (~6,300 rows, training)
+│   └── sample_input.txt       # sample caption text for inference
 ├── requirements.txt
 ├── .gitignore
 └── README.md
@@ -183,7 +216,7 @@ XLM-RoBERTa classifier → REAL / FAKE
 
 ### Run
 
-#### 1. Google Colab (recommended)
+#### Google Colab
 
 - Caption extraction:
   <a target="_blank" href="https://colab.research.google.com/github/jumincho/yt-fakenews-classifier/blob/main/notebooks/01_subtitle_extraction.ipynb">
@@ -194,31 +227,39 @@ XLM-RoBERTa classifier → REAL / FAKE
     <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
   </a>
 
-A GPU runtime (T4) is recommended. Training data (`fake_or_real_news.csv`) ships as
-`data/dataset.zip`; the notebook auto-unzips it on first run. In Colab, uploading either `dataset.zip` or the raw `fake_or_real_news.csv` to the session works.
+In Colab, `git clone` the repo and open the notebooks from inside `notebooks/`
+(they import from `src/`).
 
-#### 2. Local
+#### Local
 
 ```bash
 git clone https://github.com/jumincho/yt-fakenews-classifier.git
 cd yt-fakenews-classifier
-
-# unzip training data
-unzip data/dataset.zip -d data/
-
-# install deps (CUDA recommended)
 pip install -r requirements.txt
-pip install git+https://github.com/m-bain/whisperx.git@v2.0.1
 
-# open notebooks in Jupyter
-jupyter lab notebooks/
+# Training data auto-extracts from dataset.zip on first run.
+
+# (1) Subtitle extraction — bootstrap the WhisperX virtualenv once
+virtualenv whisper-env
+whisper-env/bin/pip install --index-url https://download.pytorch.org/whl/cu117 torch==1.13.1 torchaudio==0.13.1
+whisper-env/bin/pip install git+https://github.com/m-bain/whisperx.git@v2.0.1
+export WHISPERX_BIN=$(pwd)/whisper-env/bin/whisperx
+
+python -m src.extract_subtitles "https://www.youtube.com/watch?v=4sC-k-92JBE" --out-dir output
+
+# (2) Train the classifier
+python -m src.train --epochs 3 --batch-size 8 --seed 42
+
+# (3) Predict REAL/FAKE for a transcript
+python -m src.predict output/audio.txt --model-dir output/final
 ```
+
+GPU (CUDA) recommended. ~30 minutes on a T4.
 
 ### Dataset
 
-- **Training**: `fake_or_real_news.csv` inside `data/dataset.zip`
-  (~6,300 English news articles with `title`, `text`, `label(REAL/FAKE)` columns).
-- **Inference example**: `data/sample_input.txt` — caption text from notebook 1, usable as input for notebook 2.
+- **Training**: `fake_or_real_news.csv` inside `data/dataset.zip` (~6,300 English news articles with `title`, `text`, `label(REAL/FAKE)` columns).
+- **Inference example**: `data/sample_input.txt` — a sample caption text produced by notebook 01.
 
 ### License
 
