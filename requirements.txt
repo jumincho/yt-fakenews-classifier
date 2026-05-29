@@ -14,9 +14,10 @@
 # ffmpeg-python
 # whisperx @ git+https://github.com/m-bain/whisperx.git@v2.0.1
 
-# Notebook 02 — transformers / datasets / evaluate 의 API 변경 영향을 받아 핀.
+# Notebook 02 — train.py 가 `eval_strategy` (transformers 4.41+; 이전엔 evaluation_strategy)
+# 를 사용하므로 하한을 4.41 로 고정한다.
 torch>=2.0
-transformers>=4.36,<4.46
+transformers>=4.41,<4.46
 datasets>=2.14,<3.0
 accelerate>=0.25
 evaluate>=0.4

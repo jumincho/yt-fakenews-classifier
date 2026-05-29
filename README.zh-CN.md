@@ -5,6 +5,7 @@
 **提取 YouTube 字幕并判别是否为虚假新闻的 NLP 流水线**
 
 ![Language](https://img.shields.io/badge/language-Python%203.10-3776AB?logo=python&logoColor=white)
+[![Verify](https://github.com/jumincho/yt-fakenews-classifier/actions/workflows/verify.yml/badge.svg)](https://github.com/jumincho/yt-fakenews-classifier/actions/workflows/verify.yml)
 ![Framework](https://img.shields.io/badge/framework-PyTorch%20%2B%20Transformers-EE4C2C?logo=pytorch&logoColor=white)
 ![Model](https://img.shields.io/badge/model-XLM--RoBERTa-FFD43B?logo=huggingface&logoColor=black)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -53,7 +54,7 @@ WhisperX 需要 **torch 1.13.1 (cu117)**,而分类器需要 **PyTorch ≥ 2.0**,
 - **语言**: Python 3.10+
 - **语音识别**: [WhisperX](https://github.com/m-bain/whisperx) v2.0.1 (Whisper large-v2 + wav2vec2 对齐)
 - **音频下载**: `yt-dlp`、`ffmpeg`
-- **分类**: Hugging Face `transformers` (≥ 4.36, < 4.46)、`datasets`、`evaluate`、`accelerate`
+- **分类**: Hugging Face `transformers` (≥ 4.41, < 4.46)、`datasets`、`evaluate`、`accelerate`
 - **训练框架**: PyTorch ≥ 2.0 + `Trainer`
 - **数据**: `pandas`、`scikit-learn`
 - **硬件**: 推荐 GPU (Colab T4 等)
@@ -131,11 +132,11 @@ python -m src.predict output/audio.txt --model-dir output/final
 
 ## 屏幕截图
 
-![008](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/615e65f5-edec-464c-bcd2-a72d8efc989b)
-![009](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/477220aa-c59e-4c3e-8929-7b6923b35394)
-![010](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/57fb6b07-950d-472b-a9ce-ab30414bd363)
-![011](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/40f9dab0-8884-45b9-aa6b-147c5125b51f)
-![013](https://github.com/jumincho/YouTube-fake-news-detector/assets/77545063/5fd12381-ff93-4d20-9f95-5568f83714e3)
+![008](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/615e65f5-edec-464c-bcd2-a72d8efc989b)
+![009](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/477220aa-c59e-4c3e-8929-7b6923b35394)
+![010](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/57fb6b07-950d-472b-a9ce-ab30414bd363)
+![011](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/40f9dab0-8884-45b9-aa6b-147c5125b51f)
+![013](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/5fd12381-ff93-4d20-9f95-5568f83714e3)
 
 ## 许可证
 

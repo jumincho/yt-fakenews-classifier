@@ -66,6 +66,9 @@ jobs:
           sys.exit(fail)
           "
 
+      - name: src/ package compiles
+        run: python -m compileall -q src
+
       - name: README internal links resolve
         run: |
           missing=0
