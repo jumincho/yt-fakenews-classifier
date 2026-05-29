@@ -24,8 +24,9 @@ def classify_text(
     max_length: int = 512,
 ) -> str:
     """Return `"REAL"` or `"FAKE"` for the given text."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = load_tokenizer(str(tokenizer_dir or model_dir))
-    model = load_classifier(str(model_dir), num_labels=2)
+    model = load_classifier(str(model_dir), num_labels=2).to(device)
     model.eval()
     enc = tokenizer(
         text,
@@ -33,7 +34,7 @@ def classify_text(
         padding="max_length",
         truncation=True,
         return_tensors="pt",
-    )
+    ).to(device)
     with torch.no_grad():
         logits = model(
             input_ids=enc["input_ids"],
