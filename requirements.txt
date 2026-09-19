@@ -1,21 +1,22 @@
 # ─────────────────────────────────────────────────────────────────────────
-# 두 노트북은 서로 다른 환경에서 동작합니다.
+# The two notebooks run in different environments.
 #
-# 01_subtitle_extraction.ipynb : WhisperX 가 요구하는 구버전 torch (1.13.1).
-#   노트북 셀이 직접 가상환경 (whisper-env) 을 만들고 거기에 설치합니다.
-#   → 이 requirements.txt 에는 포함하지 않습니다 (시스템 토치와 충돌).
+# 01_subtitle_extraction.ipynb : WhisperX requires an older torch (1.13.1).
+#   The notebook cells create a dedicated virtualenv (whisper-env) and
+#   install into it, so nothing from that stage is listed here (it would
+#   conflict with the system torch).
 #
-# 02_fake_news_classification.ipynb : 최신 transformers / datasets.
-#   → 아래 패키지 목록.
+# 02_fake_news_classification.ipynb : recent transformers / datasets.
+#   → the package list below.
 # ─────────────────────────────────────────────────────────────────────────
 
-# Notebook 01 에서 별도 셀로 설치 (참고용 주석)
+# Installed by notebook 01 in a separate cell (listed here for reference only)
 # yt-dlp
 # ffmpeg-python
 # whisperx @ git+https://github.com/m-bain/whisperx.git@v2.0.1
 
-# Notebook 02 — train.py 가 `eval_strategy` (transformers 4.41+; 이전엔 evaluation_strategy)
-# 를 사용하므로 하한을 4.41 로 고정한다.
+# Notebook 02 — train.py uses `eval_strategy` (transformers 4.41+; previously
+# `evaluation_strategy`), so the lower bound is 4.41.
 torch>=2.0
 transformers>=4.41,<4.46
 datasets>=2.14,<3.0
