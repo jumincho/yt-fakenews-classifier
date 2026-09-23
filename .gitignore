@@ -1,18 +1,41 @@
-.ipynb_checkpoints/
-__pycache__/
-*.pyc
-.DS_Store
+# Trained models, pipeline outputs and training checkpoints
+/models/
+/outputs/
 
-# Colab/notebook artifacts
-output/
-logs/
-wandb/
-whisper-env/
-youtubeaudio/
+# Downloaded or converted media
 *.mp3
-*.srt
-audio.*
+*.m4a
+*.opus
+*.ogg
+*.wav
+*.flac
+*.webm
+*.mp4
+*.mkv
+*.part
+*.ytdl
 
-# Local data extracted from dataset.zip
-data/fake_or_real_news.csv
-fake_or_real_news.csv
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+.venv/
+venv/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

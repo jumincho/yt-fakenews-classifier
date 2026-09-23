@@ -1,0 +1,12 @@
+1
+00:00:01,000 --> 00:00:03,500
+<i>Good evening,</i> and welcome.
+
+2
+00:00:03,600 --> 00:00:06,000
+{\an8}Tonight: the city council
+votes on the budget.
+
+3
+00:00:06,100 --> 00:00:07,000
+[Music]

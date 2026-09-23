@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types and tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the package with development tools
+        run: python -m pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check --output-format=github .
+
+      - name: Check formatting (ruff)
+        run: ruff format --check .
+
+      - name: Type-check (mypy)
+        run: mypy
+
+      - name: Unit tests (pytest)
+        run: pytest
+
+      - name: Reproduce the baseline on the bundled dataset
+        if: matrix.python-version == '3.12'
+        run: |
+          ytfakenews train baseline --output-dir models/baseline --seed 42
+          ytfakenews evaluate --model models/baseline --chunked --json \
+            --output models/baseline/metrics_chunked_test.json > /dev/null
+          {
+            echo '### Baseline, seed 42'
+            echo '```'
+            ytfakenews evaluate --model models/baseline -q
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload baseline metrics
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v7
+        with:
+          name: baseline-metrics
+          path: models/baseline/*.json

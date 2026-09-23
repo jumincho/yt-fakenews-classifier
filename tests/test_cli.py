@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+import io
+import json
+from pathlib import Path
+
+import pytest
+
+from ytfakenews import __version__
+from ytfakenews.cli import main
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def run_cli(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, str, str]:
+    code = main(list(argv))
+    out, err = capsys.readouterr()
+    return code, out, err
+
+
+def test_version(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--version"])
+    assert exit_info.value.code == 0
+    assert capsys.readouterr().out.strip() == f"ytfakenews {__version__}"
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        ([], "COMMAND"),
+        (["train"], "baseline"),
+        (["train", "baseline"], "--C"),
+        (["evaluate"], "--chunked"),
+        (["predict"], "--text"),
+    ],
+)
+def test_help(capsys: pytest.CaptureFixture[str], argv: list[str], expected: str) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main([*argv, "--help"])
+    assert exit_info.value.code == 0
+    assert expected in capsys.readouterr().out
+
+
+def test_missing_command_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main([])
+    assert exit_info.value.code == 2
+    assert "required" in capsys.readouterr().err
+
+
+def test_train_baseline(capsys: pytest.CaptureFixture[str], news_zip: Path, tmp_path: Path) -> None:
+    out_dir = tmp_path / "model"
+    code, out, err = run_cli(
+        capsys, "train", "baseline", "--data", str(news_zip), "--output-dir", str(out_dir)
+    )
+    assert code == 0
+    assert f"Saved baseline model to {out_dir}" in out
+    assert "validation" in out
+    assert "Test confusion matrix" in out
+    assert "Loaded 60 rows" in err
+    assert (out_dir / "model.joblib").is_file()
+
+
+def test_evaluate(capsys: pytest.CaptureFixture[str], baseline_dir: Path, tmp_path: Path) -> None:
+    code, out, _ = run_cli(capsys, "evaluate", "--model", str(baseline_dir))
+    assert code == 0
+    assert "on the test split (document)" in out
+
+    report = tmp_path / "report.json"
+    args = ("--split", "val", "--chunked", "--chunk-words", "20", "--overlap", "5", "--json")
+    code, out, _ = run_cli(
+        capsys, "evaluate", "--model", str(baseline_dir), *args, "--output", str(report)
+    )
+    assert code == 0
+    metrics = json.loads(out)
+    assert metrics == json.loads(report.read_text(encoding="utf-8"))
+    assert metrics["split"] == "val"
+    assert metrics["input"] == {"mode": "chunked", "chunk_words": 20, "overlap": 5}
+    assert metrics["model"] == {"path": baseline_dir.as_posix(), "backend": "baseline"}
+
+
+def test_predict_text_as_json(capsys: pytest.CaptureFixture[str], baseline_dir: Path) -> None:
+    text = "shocking truth exposed secret they hide share wake up bombshell leaked hoax"
+    code, out, _ = run_cli(
+        capsys, "predict", "--model", str(baseline_dir), "--text", text, "--json"
+    )
+    assert code == 0
+    result = json.loads(out)
+    assert result["label"] == "FAKE"
+    assert result["model"]["backend"] == "baseline"
+    assert 0.5 <= result["p_fake"] <= 1
+
+
+def test_predict_subtitle_file(capsys: pytest.CaptureFixture[str], baseline_dir: Path) -> None:
+    code, out, _ = run_cli(
+        capsys, "predict", str(FIXTURES / "sample.srt"), "--model", str(baseline_dir)
+    )
+    assert code == 0
+    assert "P(fake) =" in out
+    assert "input: 12 words" in out
+
+
+def test_predict_long_text_shows_chunks(
+    capsys: pytest.CaptureFixture[str], baseline_dir: Path
+) -> None:
+    text = "officials said the committee report " * 100
+    code, out, _ = run_cli(capsys, "predict", "--model", str(baseline_dir), "--text", text)
+    assert code == 0
+    assert out.startswith("REAL")
+    assert "mean over 2 chunks" in out
+    assert "preview" in out
+
+
+def test_predict_reads_stdin(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, baseline_dir: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin", io.StringIO("officials said the budget report"))
+    code, out, _ = run_cli(capsys, "predict", "-", "--model", str(baseline_dir), "--json")
+    assert code == 0
+    assert json.loads(out)["n_words"] == 5
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["predict"],
+        ["predict", "file.txt", "--text", "both"],
+        ["predict", "--text", "x", "--threshold", "2"],
+        ["predict", "--text", "x", "--chunk-words", "0"],
+        ["predict", "--text", "x", "--chunk-words", "50"],
+        ["evaluate", "--overlap", "300"],
+        ["train", "baseline", "--val-size", "1.5"],
+    ],
+)
+def test_usage_errors(capsys: pytest.CaptureFixture[str], argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(argv)
+    assert exit_info.value.code == 2
+    assert "error:" in capsys.readouterr().err
+
+
+def test_runtime_errors_are_reported_without_traceback(
+    capsys: pytest.CaptureFixture[str], baseline_dir: Path, tmp_path: Path
+) -> None:
+    code, _, err = run_cli(capsys, "predict", "--model", str(tmp_path / "nope"), "--text", "x")
+    assert code == 1
+    assert err.startswith("error: model directory not found")
+
+    code, _, err = run_cli(
+        capsys, "predict", str(tmp_path / "missing.txt"), "--model", str(baseline_dir)
+    )
+    assert (code, err.strip()) == (1, f"error: file not found: {tmp_path / 'missing.txt'}")
+
+    code, _, err = run_cli(capsys, "predict", "--model", str(baseline_dir), "--text", "[Music]")
+    assert code == 1
+    assert "empty after cleaning" in err
+
+    code, _, err = run_cli(capsys, "train", "baseline", "--data", str(tmp_path / "none.zip"))
+    assert code == 1
+    assert "dataset not found" in err
