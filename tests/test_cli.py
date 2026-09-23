@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
+from tests.helpers import FIXTURES, VIDEO, VIDEO_URL, FakeYouTube
 from ytfakenews import __version__
 from ytfakenews.cli import main
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def run_cli(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, str, str]:
@@ -33,6 +33,8 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
         (["train", "baseline"], "--C"),
         (["evaluate"], "--chunked"),
         (["predict"], "--text"),
+        (["transcribe"], "--captions"),
+        (["run"], "--whisper-model"),
     ],
 )
 def test_help(capsys: pytest.CaptureFixture[str], argv: list[str], expected: str) -> None:
@@ -87,9 +89,9 @@ def test_predict_text_as_json(capsys: pytest.CaptureFixture[str], baseline_dir: 
     )
     assert code == 0
     result = json.loads(out)
-    assert result["label"] == "FAKE"
     assert result["model"]["backend"] == "baseline"
-    assert 0.5 <= result["p_fake"] <= 1
+    assert result["prediction"]["label"] == "FAKE"
+    assert 0.5 <= result["prediction"]["p_fake"] <= 1
 
 
 def test_predict_subtitle_file(capsys: pytest.CaptureFixture[str], baseline_dir: Path) -> None:
@@ -118,7 +120,7 @@ def test_predict_reads_stdin(
     monkeypatch.setattr("sys.stdin", io.StringIO("officials said the budget report"))
     code, out, _ = run_cli(capsys, "predict", "-", "--model", str(baseline_dir), "--json")
     assert code == 0
-    assert json.loads(out)["n_words"] == 5
+    assert json.loads(out)["prediction"]["n_words"] == 5
 
 
 @pytest.mark.parametrize(
@@ -131,6 +133,8 @@ def test_predict_reads_stdin(
         ["predict", "--text", "x", "--chunk-words", "50"],
         ["evaluate", "--overlap", "300"],
         ["train", "baseline", "--val-size", "1.5"],
+        ["transcribe", VIDEO_URL, "--captions", "--translate"],
+        ["run"],
     ],
 )
 def test_usage_errors(capsys: pytest.CaptureFixture[str], argv: list[str]) -> None:
@@ -159,3 +163,85 @@ def test_runtime_errors_are_reported_without_traceback(
     code, _, err = run_cli(capsys, "train", "baseline", "--data", str(tmp_path / "none.zip"))
     assert code == 1
     assert "dataset not found" in err
+
+
+# -------------------------------------------------------- transcribe and run (mocked)
+
+
+def test_transcribe(
+    capsys: pytest.CaptureFixture[str], fake_youtube: FakeYouTube, tmp_path: Path
+) -> None:
+    code, out, _ = run_cli(capsys, "transcribe", VIDEO_URL, "-o", str(tmp_path), "--device", "cpu")
+    assert code == 0
+    assert out.startswith("Transcript: 2 segments, 10 words, language en (faster-whisper small)")
+    assert (tmp_path / f"{VIDEO['id']}.srt").as_posix() in out
+    assert fake_youtube.whisper_loads[0]["device"] == "cpu"
+
+
+def test_transcribe_captions(
+    capsys: pytest.CaptureFixture[str], fake_youtube: FakeYouTube, tmp_path: Path
+) -> None:
+    code, out, _ = run_cli(capsys, "transcribe", VIDEO_URL, "--captions", "-o", str(tmp_path))
+    assert code == 0
+    assert "(automatic captions, track en)" in out
+    assert fake_youtube.whisper_loads == []
+
+
+def test_run_prints_video_transcript_and_prediction(
+    capsys: pytest.CaptureFixture[str],
+    fake_youtube: FakeYouTube,
+    baseline_dir: Path,
+    tmp_path: Path,
+) -> None:
+    code, out, _ = run_cli(
+        capsys, "run", VIDEO_URL, "--model", str(baseline_dir), "-o", str(tmp_path)
+    )
+    assert code == 0
+    lines = out.splitlines()
+    assert lines[0] == "Video:      Evening news"
+    assert lines[1].strip() == VIDEO_URL
+    assert lines[2].startswith("Transcript: 2 segments")
+    assert lines[4].startswith("REAL  P(fake) = ")
+
+
+def test_run_json(
+    capsys: pytest.CaptureFixture[str],
+    fake_youtube: FakeYouTube,
+    baseline_dir: Path,
+    tmp_path: Path,
+) -> None:
+    code, out, _ = run_cli(
+        capsys, "run", VIDEO_URL, "--model", str(baseline_dir), "-o", str(tmp_path), "--json"
+    )
+    assert code == 0
+    result = json.loads(out)
+    assert result["video"]["id"] == VIDEO["id"]
+    assert result["transcript"]["source"] == "whisper"
+    assert result["transcript"]["n_segments"] == 2
+    assert Path(result["transcript"]["files"]["txt"]).is_file()
+    assert result["prediction"]["label"] == "REAL"
+    assert result["prediction"]["n_chunks"] == 1
+
+
+def test_run_checks_the_model_before_downloading(
+    capsys: pytest.CaptureFixture[str], fake_youtube: FakeYouTube, tmp_path: Path
+) -> None:
+    code, _, err = run_cli(capsys, "run", VIDEO_URL, "--model", str(tmp_path / "none"))
+    assert code == 1
+    assert "model directory not found" in err
+    assert fake_youtube.extract_calls == []
+
+
+def test_missing_asr_extra_is_reported(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    baseline_dir: Path,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setitem(sys.modules, "yt_dlp", None)
+    code, _, err = run_cli(
+        capsys, "run", VIDEO_URL, "--model", str(baseline_dir), "-o", str(tmp_path)
+    )
+    assert code == 1
+    assert "error: this feature needs the optional 'asr' dependencies" in err
+    assert 'pip install "ytfakenews[asr] @ git+https://github.com/' in err

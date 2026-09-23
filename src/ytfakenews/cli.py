@@ -7,8 +7,9 @@ import json
 import logging
 import sys
 from collections.abc import Callable, Sequence
+from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ytfakenews import __version__
 from ytfakenews.data import DEFAULT_DATA_PATH
@@ -21,6 +22,10 @@ from ytfakenews.predict import (
     Classifier,
     Prediction,
 )
+from ytfakenews.transcribe import DEFAULT_OUTPUT_DIR, DEFAULT_WHISPER_MODEL
+
+if TYPE_CHECKING:
+    from ytfakenews.transcribe import Transcript, TranscriptFiles
 
 __all__ = ["build_parser", "main"]
 
@@ -38,6 +43,8 @@ English news articles: it picks up style and source cues, it does not check fact
 EPILOG = """\
 examples:
   ytfakenews train baseline
+  ytfakenews run "https://www.youtube.com/watch?v=VIDEO_ID"
+  ytfakenews transcribe "https://www.youtube.com/watch?v=VIDEO_ID" --captions
   ytfakenews predict examples/transcript_local_news.txt
   ytfakenews predict --text "Officials confirmed the figures on Tuesday." --json
 
@@ -143,10 +150,56 @@ def _add_classification_options(parser: argparse.ArgumentParser) -> None:
         metavar="P",
         help="label FAKE when the mean P(fake) is at least P (default: %(default)s)",
     )
+
+
+def _add_device_option(parser: argparse.ArgumentParser, *, help_text: str) -> None:
+    parser.add_argument("--device", default="auto", help=f"{help_text} (default: auto)")
+
+
+_TRANSFORMER_DEVICE_HELP = "device for the transformer backend: auto, cpu, cuda, cuda:1, mps"
+
+
+def _add_transcription_options(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group("transcription")
     group.add_argument(
-        "--device",
+        "-o",
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT_DIR,
+        metavar="DIR",
+        help="where to write <id>.txt, .srt and .json (default: %(default)s)",
+    )
+    group.add_argument(
+        "--captions",
+        action="store_true",
+        help="use the video's own subtitles or automatic captions instead of Whisper",
+    )
+    group.add_argument(
+        "--language",
+        metavar="CODE",
+        help="spoken language for Whisper, e.g. en or ko (default: detect); with "
+        "--captions the caption language (default: en)",
+    )
+    group.add_argument(
+        "--translate",
+        action="store_true",
+        help="have Whisper translate the speech into English",
+    )
+    group.add_argument(
+        "--whisper-model",
+        default=DEFAULT_WHISPER_MODEL,
+        metavar="NAME",
+        help="faster-whisper model: tiny, base, small, medium, large-v3, turbo, ... "
+        "(default: %(default)s)",
+    )
+    group.add_argument(
+        "--compute-type",
         default="auto",
-        help="transformer backend only: auto, cpu, cuda, cuda:1, mps (default: auto)",
+        metavar="TYPE",
+        help="CTranslate2 compute type, e.g. int8 or float16 (default: auto)",
+    )
+    group.add_argument(
+        "--keep-audio", action="store_true", help="keep the downloaded audio next to the transcript"
     )
 
 
@@ -229,6 +282,7 @@ def _add_evaluate_parser(
         ),
     )
     _add_classification_options(evaluate)
+    _add_device_option(evaluate, help_text=_TRANSFORMER_DEVICE_HELP)
     evaluate.add_argument(
         "--data",
         type=Path,
@@ -268,8 +322,52 @@ def _add_predict_parser(
     predict.add_argument("file", nargs="?", type=Path, metavar="FILE", help="transcript file")
     predict.add_argument("--text", help="classify this text instead of a file")
     _add_classification_options(predict)
+    _add_device_option(predict, help_text=_TRANSFORMER_DEVICE_HELP)
     predict.add_argument("--json", action="store_true", help="print the result as JSON")
     predict.set_defaults(handler=_cmd_predict, usage_error=predict.error)
+
+
+def _add_transcribe_parser(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    common: argparse.ArgumentParser,
+) -> None:
+    transcribe = commands.add_parser(
+        "transcribe",
+        parents=[common],
+        help="transcribe a video (or local audio file) to .txt/.srt/.json",
+        description=(
+            "Download the audio of a video with yt-dlp and transcribe it with "
+            "faster-whisper (voice-activity filter on), or fetch the video's captions "
+            "with --captions. A local audio or video file can be given instead of a URL. "
+            "Needs the 'asr' extra."
+        ),
+    )
+    transcribe.add_argument("source", metavar="URL_OR_FILE", help="video URL or media file")
+    _add_transcription_options(transcribe)
+    _add_device_option(transcribe, help_text="device for Whisper: auto, cpu or cuda")
+    transcribe.set_defaults(handler=_cmd_transcribe, usage_error=transcribe.error)
+
+
+def _add_run_parser(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    common: argparse.ArgumentParser,
+) -> None:
+    run = commands.add_parser(
+        "run",
+        parents=[common],
+        help="transcribe a video and classify it (end to end)",
+        description=(
+            "Transcribe a video (see `ytfakenews transcribe`) and classify the transcript "
+            "(see `ytfakenews predict`). The model is loaded first, so a missing model "
+            "fails before anything is downloaded."
+        ),
+    )
+    run.add_argument("source", metavar="URL_OR_FILE", help="video URL or media file")
+    _add_transcription_options(run)
+    _add_classification_options(run)
+    _add_device_option(run, help_text="device for Whisper and the transformer: auto, cpu, cuda")
+    run.add_argument("--json", action="store_true", help="print the result as JSON")
+    run.set_defaults(handler=_cmd_run, usage_error=run.error)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -291,9 +389,11 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(
         title="commands", dest="command", metavar="COMMAND", required=True
     )
+    _add_transcribe_parser(commands, common)
     _add_train_parser(commands, common)
     _add_evaluate_parser(commands, common)
     _add_predict_parser(commands, common)
+    _add_run_parser(commands, common)
     return parser
 
 
@@ -394,10 +494,76 @@ def _cmd_predict(args: argparse.Namespace) -> int:
     classifier = load_classifier(args.model, device=args.device)
     prediction = _classify(text, classifier, args)
     if args.json:
-        payload = {"model": _model_info(args.model, classifier.backend), **prediction.to_dict()}
+        payload = {
+            "model": _model_info(args.model, classifier.backend),
+            "prediction": prediction.to_dict(),
+        }
         print(json.dumps(payload, indent=2))
     else:
         print(_format_prediction(prediction, args.model, classifier.backend))
+    return 0
+
+
+def _check_transcription_args(args: argparse.Namespace) -> None:
+    if args.captions and args.translate:
+        args.usage_error("--translate applies to Whisper; it cannot be combined with --captions")
+
+
+def _transcribe(args: argparse.Namespace) -> tuple[Transcript, TranscriptFiles]:
+    from ytfakenews.transcribe import transcribe_source
+
+    return transcribe_source(
+        args.source,
+        output_dir=args.output_dir,
+        captions=args.captions,
+        language=args.language,
+        translate=args.translate,
+        model_size=args.whisper_model,
+        device=args.device,
+        compute_type=args.compute_type,
+        keep_audio=args.keep_audio,
+    )
+
+
+def _cmd_transcribe(args: argparse.Namespace) -> int:
+    _check_transcription_args(args)
+    transcript, files = _transcribe(args)
+    print(_describe_transcript(transcript))
+    for path in (files.txt, files.srt, files.json):
+        print(f"  {path.as_posix()}")
+    return 0
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    from ytfakenews.predict import load_classifier
+
+    _check_chunking(args)
+    _check_transcription_args(args)
+    classifier = load_classifier(args.model, device=args.device)
+    transcript, files = _transcribe(args)
+    prediction = _classify(transcript.text, classifier, args)
+    if args.json:
+        payload = {
+            "source": args.source,
+            "video": asdict(transcript.video) if transcript.video else None,
+            "transcript": {
+                "source": transcript.source,
+                "language": transcript.language,
+                "details": transcript.details,
+                "n_segments": len(transcript.segments),
+                "files": {kind: path.as_posix() for kind, path in asdict(files).items()},
+            },
+            "model": _model_info(args.model, classifier.backend),
+            "prediction": prediction.to_dict(),
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
+    if transcript.video:
+        print(f"Video:      {transcript.video.title or transcript.video.id}")
+        if transcript.video.url:
+            print(f"            {transcript.video.url}")
+    print(f"{_describe_transcript(transcript)} -> {files.txt.as_posix()}\n")
+    print(_format_prediction(prediction, args.model, classifier.backend))
     return 0
 
 
@@ -421,6 +587,23 @@ def _classify(text: str, classifier: Classifier, args: argparse.Namespace) -> Pr
 
 def _model_info(model_dir: Path, backend: str) -> dict[str, str]:
     return {"path": model_dir.as_posix(), "backend": backend}
+
+
+def _describe_transcript(transcript: Transcript) -> str:
+    details = transcript.details
+    if transcript.source == "whisper":
+        origin = f"faster-whisper {details.get('model')}"
+        if details.get("task") == "translate":
+            origin += f", translated from {details.get('spoken_language')}"
+    else:
+        origin = f"{details.get('kind')} captions, track {details.get('track')}"
+        if details.get("machine_translated"):
+            origin += ", machine-translated by YouTube"
+    words = len(transcript.text.split())
+    return (
+        f"Transcript: {len(transcript.segments)} segments, {words:,} words, "
+        f"language {transcript.language or 'unknown'} ({origin})"
+    )
 
 
 def _format_metrics_table(rows: Sequence[tuple[str, dict[str, Any]]]) -> str:
