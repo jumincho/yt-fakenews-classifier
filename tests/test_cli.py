@@ -83,6 +83,16 @@ def test_evaluate(capsys: pytest.CaptureFixture[str], baseline_dir: Path, tmp_pa
     assert metrics["model"] == {"path": baseline_dir.as_posix(), "backend": "baseline"}
 
 
+def test_evaluate_short_inputs(capsys: pytest.CaptureFixture[str], baseline_dir: Path) -> None:
+    code, out, _ = run_cli(capsys, "evaluate", "--model", str(baseline_dir), "--max-words", "5")
+    assert code == 0
+    assert "on the test split (document, first 5 words)" in out
+    code, out, _ = run_cli(
+        capsys, "evaluate", "--model", str(baseline_dir), "--max-words", "5", "--json"
+    )
+    assert json.loads(out)["input"] == {"mode": "document", "max_words": 5}
+
+
 def test_predict_text_as_json(capsys: pytest.CaptureFixture[str], baseline_dir: Path) -> None:
     text = "shocking truth exposed secret they hide share wake up bombshell leaked hoax"
     code, out, _ = run_cli(

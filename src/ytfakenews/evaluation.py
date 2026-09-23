@@ -74,14 +74,21 @@ def evaluate_classifier(
     chunk_words: int = DEFAULT_CHUNK_WORDS,
     overlap: int = DEFAULT_OVERLAP,
     threshold: float = DEFAULT_THRESHOLD,
+    max_words: int | None = None,
 ) -> dict[str, Any]:
     """Score ``texts`` with ``classifier`` and compute :func:`compute_metrics`.
 
     By default every text is scored as one document, exactly as the model saw its
     training articles. With ``chunked=True`` each text goes through the same
-    clean -> chunk -> average path that is used for transcripts.
+    clean -> chunk -> average path that is used for transcripts. ``max_words`` keeps
+    only the first words of every text, to see how the model copes with inputs as
+    short as the transcript of a brief clip.
     """
     texts = list(texts)
+    if max_words is not None:
+        if max_words < 1:
+            raise ValueError(f"max_words must be at least 1, got {max_words}")
+        texts = [" ".join(text.split()[:max_words]) for text in texts]
     if chunked:
         predictions = classify_texts(
             texts, classifier, chunk_words=chunk_words, overlap=overlap, threshold=threshold
@@ -91,6 +98,8 @@ def evaluate_classifier(
     else:
         p_fake = np.asarray(classifier.predict_proba(texts), dtype=float)
         mode = {"mode": "document"}
+    if max_words is not None:
+        mode["max_words"] = max_words
     metrics = compute_metrics(labels, p_fake, threshold=threshold)
     metrics["input"] = mode
     return metrics
