@@ -167,6 +167,11 @@ def test_runtime_errors_are_reported_without_traceback(
     )
     assert (code, err.strip()) == (1, f"error: file not found: {tmp_path / 'missing.txt'}")
 
+    binary = tmp_path / "audio.txt"
+    binary.write_bytes(b"\xff\xfe\x00\x81 not text")
+    code, _, err = run_cli(capsys, "predict", str(binary), "--model", str(baseline_dir))
+    assert (code, "is not UTF-8 text" in err) == (1, True)
+
     code, _, err = run_cli(capsys, "predict", "--model", str(baseline_dir), "--text", "[Music]")
     assert code == 1
     assert "empty after cleaning" in err
@@ -232,6 +237,20 @@ def test_run_json(
     assert Path(result["transcript"]["files"]["txt"]).is_file()
     assert result["prediction"]["label"] == "REAL"
     assert result["prediction"]["n_chunks"] == 1
+
+
+def test_run_with_no_speech(
+    capsys: pytest.CaptureFixture[str],
+    fake_youtube: FakeYouTube,
+    baseline_dir: Path,
+    tmp_path: Path,
+) -> None:
+    fake_youtube.segments = []
+    code, _, err = run_cli(
+        capsys, "run", VIDEO_URL, "--model", str(baseline_dir), "-o", str(tmp_path)
+    )
+    assert code == 1
+    assert "is empty (no speech found)" in err
 
 
 def test_run_checks_the_model_before_downloading(

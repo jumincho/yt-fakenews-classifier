@@ -196,3 +196,15 @@ def test_cli_train_transformer(
     code = main(["train", "transformer", "--data", str(news_zip), *args, "--head-tokens", "40"])
     assert code == 1
     assert "head_tokens must be between 0 and 30" in capsys.readouterr().err
+
+
+def test_unknown_base_model_is_reported(
+    capsys: pytest.CaptureFixture[str], news_zip: Path, tmp_path: Path
+) -> None:
+    import_or_skip("torch")
+    import_or_skip("transformers")
+    missing = tmp_path / "no-such-model"
+    missing.mkdir()
+    code = main(["train", "transformer", "--data", str(news_zip), "--model-name", str(missing)])
+    assert code == 1
+    assert f"could not load {str(missing)!r}" in capsys.readouterr().err

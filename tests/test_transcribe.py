@@ -59,6 +59,15 @@ def test_transcribe_can_translate(fake_youtube: FakeYouTube, tmp_path: Path) -> 
     assert fake_youtube.whisper_calls[0][1]["task"] == "translate"
 
 
+def test_transcription_errors_are_reported(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
+    def undecodable(audio: str, **kwargs: Any) -> Any:
+        raise ValueError("Invalid data found when processing input")
+
+    fake_youtube._transcribe = undecodable
+    with pytest.raises(TranscriptionError, match=r"could not transcribe .*clip\.wav: Invalid data"):
+        tr.transcribe(write_tone(tmp_path / "clip.wav"))
+
+
 def test_transcribe_source_for_a_url(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
     transcript, files = tr.transcribe_source(VIDEO_URL, output_dir=tmp_path)
     assert transcript.video is not None

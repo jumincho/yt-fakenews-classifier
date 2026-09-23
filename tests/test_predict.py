@@ -74,6 +74,13 @@ def test_empty_text_is_rejected(text: str) -> None:
         classify_text(text, KeywordClassifier())
 
 
+def test_empty_text_in_a_batch_is_named() -> None:
+    with pytest.raises(ValueError, match=r"^text #1 is empty"):
+        classify_texts(["fake news", "[Music]"], KeywordClassifier())
+    with pytest.raises(ValueError, match=r"^the text is empty"):
+        classify_text("[Music]", KeywordClassifier())
+
+
 def test_classify_texts_scores_all_chunks_in_one_batch() -> None:
     classifier = KeywordClassifier()
     predictions = classify_texts(
