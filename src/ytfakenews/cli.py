@@ -43,6 +43,7 @@ English news articles: it picks up style and source cues, it does not check fact
 EPILOG = """\
 examples:
   ytfakenews train baseline
+  ytfakenews train transformer --epochs 4
   ytfakenews run "https://www.youtube.com/watch?v=VIDEO_ID"
   ytfakenews transcribe "https://www.youtube.com/watch?v=VIDEO_ID" --captions
   ytfakenews predict examples/transcript_local_news.txt
@@ -265,6 +266,88 @@ def _add_train_parser(
     )
     baseline.set_defaults(handler=_cmd_train_baseline)
 
+    transformer = backends.add_parser(
+        "transformer",
+        parents=[common],
+        help="fine-tune a transformer encoder (GPU recommended)",
+        description=(
+            "Fine-tune a transformer encoder (default: multilingual XLM-RoBERTa base) with "
+            "head+tail truncation and early stopping on validation F1, then evaluate it and "
+            "save the model, tokenizer, metrics.json and manifest.json. The base model is "
+            "downloaded from the Hugging Face Hub unless --model-name is a local directory. "
+            "Needs the 'transformer' extra."
+        ),
+    )
+    _add_data_options(transformer)
+    transformer.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("models") / "transformer",
+        metavar="DIR",
+        help="where to save the model (default: %(default)s)",
+    )
+    fine_tuning = transformer.add_argument_group("fine-tuning")
+    fine_tuning.add_argument(
+        "--model-name",
+        default="xlm-roberta-base",
+        metavar="NAME",
+        help="Hugging Face model id or local directory (default: %(default)s)",
+    )
+    fine_tuning.add_argument(
+        "--epochs", type=_positive_float, default=4.0, help="maximum epochs (default: 4)"
+    )
+    fine_tuning.add_argument(
+        "--patience",
+        type=_int_at_least(1),
+        default=2,
+        metavar="N",
+        help="stop after N epochs without a better validation F1 (default: %(default)s)",
+    )
+    fine_tuning.add_argument(
+        "--batch-size", type=_int_at_least(1), default=8, metavar="N", help="(default: 8)"
+    )
+    fine_tuning.add_argument(
+        "--grad-accum",
+        type=_int_at_least(1),
+        default=2,
+        metavar="N",
+        help="gradient accumulation steps (default: %(default)s)",
+    )
+    fine_tuning.add_argument(
+        "--lr", type=_positive_float, default=2e-5, help="learning rate (default: %(default)s)"
+    )
+    fine_tuning.add_argument(
+        "--max-length",
+        type=_int_at_least(8),
+        default=512,
+        metavar="N",
+        help="tokens per input, including special tokens (default: %(default)s)",
+    )
+    fine_tuning.add_argument(
+        "--head-tokens",
+        type=_int_at_least(0),
+        default=128,
+        metavar="N",
+        help="tokens kept from the start of a long text; the rest come from its end "
+        "(default: %(default)s)",
+    )
+    fine_tuning.add_argument(
+        "--max-train-samples",
+        type=_int_at_least(1),
+        metavar="N",
+        help="train on a random subset of N articles, e.g. for a quick CPU run",
+    )
+    fine_tuning.add_argument(
+        "--fp16",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="mixed precision (default: on when a CUDA GPU is used)",
+    )
+    fine_tuning.add_argument(
+        "--cpu", action="store_true", help="train on the CPU even if a GPU exists"
+    )
+    transformer.set_defaults(handler=_cmd_train_transformer)
+
 
 def _add_evaluate_parser(
     commands: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -416,6 +499,36 @@ def _cmd_train_baseline(args: argparse.Namespace) -> int:
     print(
         f"Saved baseline model to {args.output_dir} "
         f"({metrics['n_features']:,} features, fitted in {metrics['fit_seconds']:.1f} s)\n"
+    )
+    print(_format_metrics_table([("validation", metrics["validation"]), ("test", metrics["test"])]))
+    print()
+    print(_format_confusion_matrix(metrics["test"], title="Test confusion matrix"))
+    return 0
+
+
+def _cmd_train_transformer(args: argparse.Namespace) -> int:
+    from ytfakenews.data import SplitConfig
+    from ytfakenews.transformer import TransformerConfig, train_transformer
+
+    config = TransformerConfig(
+        model_name=args.model_name,
+        max_length=args.max_length,
+        head_tokens=args.head_tokens,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        grad_accum_steps=args.grad_accum,
+        learning_rate=args.lr,
+        patience=args.patience,
+        seed=args.seed,
+        fp16=args.fp16,
+        max_train_samples=args.max_train_samples,
+        cpu=args.cpu,
+    )
+    split = SplitConfig(val_size=args.val_size, test_size=args.test_size, seed=args.seed)
+    metrics = train_transformer(args.data, args.output_dir, config=config, split=split)
+    print(
+        f"Saved transformer model to {args.output_dir} (fine-tuned {args.model_name} for "
+        f"{metrics['epochs_run']:g} epochs in {metrics['train_seconds']:.0f} s)\n"
     )
     print(_format_metrics_table([("validation", metrics["validation"]), ("test", metrics["test"])]))
     print()
