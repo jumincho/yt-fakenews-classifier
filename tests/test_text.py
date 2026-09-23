@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers import FIXTURES
 from ytfakenews.text import (
     Segment,
     chunk_spans,
@@ -18,9 +19,6 @@ from ytfakenews.text import (
     segments_to_srt,
     segments_to_text,
 )
-
-FIXTURES = Path(__file__).parent / "fixtures"
-
 
 # ----------------------------------------------------------------------------- timestamps
 

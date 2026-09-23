@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from tests.helpers import FIXTURES
 from ytfakenews.data import (
     LABEL2ID,
     SplitConfig,
@@ -17,8 +18,6 @@ from ytfakenews.data import (
     split_dataset,
 )
 from ytfakenews.errors import DatasetError
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_label_mapping() -> None:

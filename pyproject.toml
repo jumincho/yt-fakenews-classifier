@@ -14,8 +14,10 @@ authors = [{ name = "Jumin Cho" }]
 keywords = [
   "fake-news",
   "nlp",
+  "speech-to-text",
   "text-classification",
   "tf-idf",
+  "whisper",
   "youtube",
 ]
 classifiers = [
@@ -42,6 +44,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Speech-to-text. faster-whisper decodes audio with PyAV (no system ffmpeg, no torch).
+# yt-dlp's "default" extra adds yt-dlp-ejs and "deno" a JavaScript runtime; recent
+# yt-dlp releases need both for full YouTube support.
+asr = [
+  "faster-whisper>=1.1",
+  "yt-dlp[default,deno]>=2026.1.29",
+]
 dev = [
   "mypy>=1.11",
   "pandas-stubs>=2.0",
@@ -99,7 +108,7 @@ select = [
 "tests/**" = ["SIM905"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["ytfakenews"]
+known-first-party = ["tests", "ytfakenews"]
 
 [tool.mypy]
 files = ["src/ytfakenews"]
@@ -109,5 +118,5 @@ pretty = true
 
 [[tool.mypy.overrides]]
 # Libraries without type information.
-module = ["joblib.*", "sklearn.*"]
+module = ["faster_whisper.*", "joblib.*", "sklearn.*", "yt_dlp.*"]
 ignore_missing_imports = true

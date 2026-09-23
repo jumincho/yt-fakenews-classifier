@@ -63,3 +63,23 @@ jobs:
         with:
           name: baseline-metrics
           path: models/baseline/*.json
+
+  extras:
+    name: Optional extras (asr)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the package with the asr extra
+        run: python -m pip install -e ".[asr,dev]"
+
+      - name: Tests, including real yt-dlp and faster-whisper checks
+        env:
+          YTFAKENEWS_REQUIRE_EXTRAS: "1"
+        run: pytest -rs
