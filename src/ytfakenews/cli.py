@@ -382,6 +382,12 @@ def _add_evaluate_parser(
     evaluate.add_argument(
         "--chunked", action="store_true", help="score chunks and average, as for transcripts"
     )
+    evaluate.add_argument(
+        "--max-words",
+        type=_int_at_least(1),
+        metavar="N",
+        help="score only the first N words of every article, to mimic short transcripts",
+    )
     evaluate.add_argument("--json", action="store_true", help="print the metrics as JSON")
     evaluate.add_argument(
         "--output", type=Path, metavar="FILE", help="also write the metrics as JSON to FILE"
@@ -559,6 +565,7 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
         chunk_words=args.chunk_words,
         overlap=args.overlap,
         threshold=args.threshold,
+        max_words=args.max_words,
     )
     metrics = {"model": _model_info(args.model, classifier.backend), "split": args.split, **metrics}
     if args.output:
@@ -571,6 +578,8 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     mode = metrics["input"]["mode"]
     if mode == "chunked":
         mode += f", {args.chunk_words}-word chunks, overlap {args.overlap}"
+    if args.max_words:
+        mode += f", first {args.max_words} words"
     print(f"Model {args.model} ({classifier.backend}) on the {args.split} split ({mode})\n")
     print(_format_metrics_table([(args.split, metrics)]))
     print()
