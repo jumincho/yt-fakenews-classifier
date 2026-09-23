@@ -65,7 +65,7 @@ jobs:
           path: models/baseline/*.json
 
   extras:
-    name: Optional extras (asr)
+    name: Optional extras (asr + transformer, CPU PyTorch)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -76,10 +76,16 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install the package with the asr extra
-        run: python -m pip install -e ".[asr,dev]"
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Tests, including real yt-dlp and faster-whisper checks
+      - name: Install the package with both extras
+        run: python -m pip install -e ".[asr,transformer,dev]"
+
+      - name: Tests, including the transformer smoke test (offline)
         env:
+          # Fail instead of skipping when an optional dependency is missing, and
+          # prove that no test reaches the Hugging Face Hub.
           YTFAKENEWS_REQUIRE_EXTRAS: "1"
+          HF_HUB_OFFLINE: "1"
         run: pytest -rs

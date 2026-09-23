@@ -28,7 +28,7 @@ __all__ = [
 MANIFEST_FILE = "manifest.json"
 METRICS_FILE = "metrics.json"
 FORMAT_VERSION = 1
-BACKENDS = ("baseline",)
+BACKENDS = ("baseline", "transformer")
 
 
 @dataclass(frozen=True)

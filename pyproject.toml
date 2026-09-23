@@ -17,7 +17,9 @@ keywords = [
   "speech-to-text",
   "text-classification",
   "tf-idf",
+  "transformers",
   "whisper",
+  "xlm-roberta",
   "youtube",
 ]
 classifiers = [
@@ -50,6 +52,14 @@ dependencies = [
 asr = [
   "faster-whisper>=1.1",
   "yt-dlp[default,deno]>=2026.1.29",
+]
+# Fine-tuning and inference with a transformer encoder. Install a CPU-only or CUDA
+# build of PyTorch first if the default wheel for your platform is not what you want.
+transformer = [
+  "accelerate>=1.1",
+  "sentencepiece>=0.2",
+  "torch>=2.5",
+  "transformers>=4.46",
 ]
 dev = [
   "mypy>=1.11",

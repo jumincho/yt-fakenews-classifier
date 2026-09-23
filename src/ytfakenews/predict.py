@@ -193,4 +193,8 @@ def load_classifier(
         from ytfakenews.baseline import BaselineClassifier  # imports scikit-learn
 
         return BaselineClassifier.load(model_dir)
+    if manifest.backend == "transformer":
+        from ytfakenews.transformer import TransformerClassifier  # needs the extra
+
+        return TransformerClassifier.load(model_dir, device=device, manifest=manifest)
     raise ModelLoadError(f"unsupported backend {manifest.backend!r} in {model_dir}")

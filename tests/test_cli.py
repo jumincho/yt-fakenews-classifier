@@ -9,6 +9,7 @@ import pytest
 
 from tests.helpers import FIXTURES, VIDEO, VIDEO_URL, FakeYouTube
 from ytfakenews import __version__
+from ytfakenews.artifacts import write_manifest
 from ytfakenews.cli import main
 
 
@@ -245,3 +246,26 @@ def test_missing_asr_extra_is_reported(
     assert code == 1
     assert "error: this feature needs the optional 'asr' dependencies" in err
     assert 'pip install "ytfakenews[asr] @ git+https://github.com/' in err
+
+
+@pytest.mark.parametrize("blocked", ["torch", "transformers"])
+def test_missing_transformer_extra_is_reported(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    news_zip: Path,
+    tmp_path: Path,
+    blocked: str,
+) -> None:
+    monkeypatch.setitem(sys.modules, blocked, None)
+    out_dir = tmp_path / "model"
+    code, _, err = run_cli(
+        capsys, "train", "transformer", "--data", str(news_zip), "--output-dir", str(out_dir)
+    )
+    assert code == 1
+    assert "needs the optional 'transformer' dependencies" in err
+    assert not out_dir.exists()
+
+    write_manifest(tmp_path, backend="transformer", config={}, data={})
+    code, _, err = run_cli(capsys, "predict", "--model", str(tmp_path), "--text", "some words")
+    assert code == 1
+    assert 'pip install -e ".[transformer]"' in err
