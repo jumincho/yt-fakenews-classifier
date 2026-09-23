@@ -32,7 +32,11 @@ def test_truncate_head_tail() -> None:
 
 
 def build_tiny_base_model(directory: Path) -> Path:
-    """Save a word-level tokenizer and a 2-layer BERT with random weights."""
+    """Save a word-level tokenizer and a 2-layer BERT with random weights.
+
+    The model gets a three-way head, like an NLI checkpoint, so the tests also cover
+    replacing it with the two-way REAL/FAKE head.
+    """
     import_or_skip("torch")
     transformers = import_or_skip("transformers")
     tokenizers = import_or_skip("tokenizers")
@@ -65,6 +69,7 @@ def build_tiny_base_model(directory: Path) -> Path:
         num_attention_heads=2,
         intermediate_size=64,
         max_position_embeddings=64,
+        num_labels=3,
     )
     tokenizer.save_pretrained(str(directory))
     transformers.BertForSequenceClassification(config).save_pretrained(str(directory))
