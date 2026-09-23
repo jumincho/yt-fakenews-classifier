@@ -605,7 +605,10 @@ def _read_input_text(args: argparse.Namespace) -> str:
         return sys.stdin.read()
     if not args.file.is_file():
         raise YTFakeNewsError(f"file not found: {args.file}")
-    return read_transcript(args.file)
+    try:
+        return read_transcript(args.file)
+    except UnicodeDecodeError as exc:
+        raise YTFakeNewsError(f"{args.file} is not UTF-8 text: {exc}") from exc
 
 
 def _cmd_predict(args: argparse.Namespace) -> int:
@@ -663,6 +666,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
     _check_transcription_args(args)
     classifier = load_classifier(args.model, device=args.device)
     transcript, files = _transcribe(args)
+    if not transcript.text.strip():
+        raise YTFakeNewsError(
+            f"the transcript of {args.source} is empty (no speech found); "
+            f"see {files.json.as_posix()}"
+        )
     prediction = _classify(transcript.text, classifier, args)
     if args.json:
         payload = {

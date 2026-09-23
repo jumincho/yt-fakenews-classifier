@@ -214,19 +214,22 @@ def transcribe(
     model = _load_whisper_model(model_size, device=device, compute_type=compute_type)
     task = "translate" if translate else "transcribe"
     logger.info("Transcribing %s (%s)", audio.name, task)
-    raw_segments, info = model.transcribe(
-        str(audio), language=language, task=task, beam_size=beam_size, vad_filter=vad_filter
-    )
-    duration = float(getattr(info, "duration", 0.0) or 0.0)
     segments = []
-    next_report = 0.25
-    for raw in raw_segments:  # lazy: decoding happens while iterating
-        text = raw.text.strip()
-        if text:
-            segments.append(Segment(float(raw.start), float(raw.end), text))
-        while duration and next_report < 1 and raw.end >= next_report * duration:
-            logger.info("  %d%% of %.0f s transcribed", round(next_report * 100), duration)
-            next_report += 0.25
+    try:
+        raw_segments, info = model.transcribe(
+            str(audio), language=language, task=task, beam_size=beam_size, vad_filter=vad_filter
+        )
+        duration = float(getattr(info, "duration", 0.0) or 0.0)
+        next_report = 0.25
+        for raw in raw_segments:  # lazy: decoding happens while iterating
+            text = raw.text.strip()
+            if text:
+                segments.append(Segment(float(raw.start), float(raw.end), text))
+            while duration and next_report < 1 and raw.end >= next_report * duration:
+                logger.info("  %d%% of %.0f s transcribed", round(next_report * 100), duration)
+                next_report += 0.25
+    except (OSError, RuntimeError, ValueError) as exc:  # undecodable media, CUDA errors, ...
+        raise TranscriptionError(f"could not transcribe {audio}: {exc}") from exc
     spoken = getattr(info, "language", None)
     return Transcript(
         segments=tuple(segments),

@@ -117,7 +117,8 @@ def classify_texts(
     for position, text in enumerate(texts):
         words = (clean_text(text) if clean else text).split()
         if not words:
-            raise ValueError(f"text #{position} is empty after cleaning; nothing to classify")
+            which = "the text" if len(texts) == 1 else f"text #{position}"
+            raise ValueError(f"{which} is empty after cleaning; nothing to classify")
         spans = chunk_spans(len(words), max_words=chunk_words, overlap=overlap)
         documents.append((words, spans))
         chunks.extend(" ".join(words[start:end]) for start, end in spans)

@@ -304,7 +304,7 @@ def train_transformer(
             label2id=LABEL2ID,
             ignore_mismatched_sizes=True,
         )
-    except OSError as exc:
+    except (OSError, ValueError) as exc:  # not found, offline, no classification head, ...
         raise ModelLoadError(
             f"could not load {config.model_name!r} (a Hugging Face Hub id or a local "
             f"directory): {exc}"
