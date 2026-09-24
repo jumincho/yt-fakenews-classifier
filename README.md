@@ -1,5 +1,7 @@
 <div align="center">
 
+🇺🇸 **English** | 🇨🇳 [简体中文](README.zh-CN.md) | 🇭🇰 [繁體中文](README.zh-HK.md) | 🇯🇵 [日本語](README.ja.md) | 🇰🇷 [한국어](README.ko.md)
+
 # yt-fakenews-classifier
 
 **Transcribe a YouTube video and score how much its transcript reads like REAL or FAKE news,
