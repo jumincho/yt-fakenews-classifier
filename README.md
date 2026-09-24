@@ -188,10 +188,10 @@ summary and uploads the `metrics.json` files as an artifact.
 
 ### Transformer
 
-This version has not been fine-tuned at full scale yet: it was built in an environment that
-could not download pretrained weights, so **no transformer results are reported**. CI runs the
-complete training, saving, loading and prediction path with a tiny, randomly initialised model
-on a CPU. To produce the numbers on a GPU, for example a free Colab T4:
+The transformer has not been fine-tuned at full scale yet, so **no transformer results are
+reported**. CI runs the complete training, saving, loading and prediction path with a tiny,
+randomly initialised model on a CPU. To produce the numbers on a GPU, for example a free Colab
+T4:
 
 ```bash
 pip install -e ".[transformer]"
@@ -205,8 +205,8 @@ with 10% warm-up and weight decay 0.01, and at most 4 epochs with early stopping
 epochs without a better validation F1; fp16 is used on CUDA and the seed is 42.
 `models/transformer/metrics.json` stores the validation and test metrics and the training log.
 `--model-name` accepts any encoder from the Hugging Face Hub or a local directory, including an
-NLI checkpoint such as `symanto/xlm-roberta-base-snli-mnli-anli-xnli` (used by the 2023
-version), whose three-way head is replaced by a new REAL/FAKE head.
+NLI checkpoint such as `symanto/xlm-roberta-base-snli-mnli-anli-xnli`, whose three-way head is
+replaced by a new REAL/FAKE head.
 
 Why a multilingual model: XLM-RoBERTa was pretrained on about 100 languages with a shared
 vocabulary, so a classifier fine-tuned on English articles can be applied to, for example, a
@@ -327,25 +327,6 @@ versions that `pyproject.toml` allows and runs the full suite with CPU-only PyTo
   automatic captions in a language other than the spoken one are machine translations.
 - **A label is not a finding.** FAKE means "resembles the FAKE articles of the training set".
   Do not publish or act on it as a claim that a video is false.
-
-## Project history
-
-The project began in December 2023 as a student project named YouTube-fake-news-detector: two
-Colab notebooks, one extracting captions with WhisperX 2.0.1 (Whisper large-v2 with wav2vec2
-alignment) in a separate torch 1.13 virtualenv, the other fine-tuning
-`symanto/xlm-roberta-base-snli-mnli-anli-xnli` with the Hugging Face Trainer and classifying
-the first 512 tokens of a transcript. Screenshots of those original 2023 Colab runs, which the
-current code does not reproduce:
-[caption extraction](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/615e65f5-edec-464c-bcd2-a72d8efc989b),
-[training](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/477220aa-c59e-4c3e-8929-7b6923b35394),
-[evaluation](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/57fb6b07-950d-472b-a9ce-ab30414bd363),
-[prediction](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/40f9dab0-8884-45b9-aa6b-147c5125b51f)
-and [result](https://github.com/jumincho/yt-fakenews-classifier/assets/77545063/5fd12381-ff93-4d20-9f95-5568f83714e3).
-
-In 2026 the code was rebuilt as the typed and tested `ytfakenews` package. faster-whisper
-replaced WhisperX, which removed the second environment; a fast, reproducible baseline was
-added; long transcripts are chunked instead of truncated; and every number in this README
-comes from the committed code. The dataset is the same.
 
 ## License
 
