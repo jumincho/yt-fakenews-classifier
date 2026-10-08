@@ -50,9 +50,17 @@ def test_example_transcripts_exist(name: str) -> None:
     assert 200 < len(text.split()) < 400
 
 
-READMES = ["README.md", "README.zh-CN.md", "README.zh-HK.md", "README.ja.md", "README.ko.md"]
+# Every README opens with a switcher that lists the languages in this order.
+LANGUAGES = [
+    ("README.md", "🇺🇸", "English"),
+    ("README.ko.md", "🇰🇷", "한국어"),
+    ("README.zh-CN.md", "🇨🇳", "简体中文"),
+    ("README.zh-HK.md", "🇭🇰", "繁體中文"),
+    ("README.ja.md", "🇯🇵", "日本語"),
+]
+READMES = [name for name, _, _ in LANGUAGES]
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
-_HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$")
+_HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$")
 
 
 def _prose_lines(markdown: str) -> list[str]:
@@ -99,7 +107,7 @@ def _anchors(markdown: str) -> set[str]:
     seen: Counter[str] = Counter()
     for line in _prose_lines(markdown):
         if match := _HEADING.match(line):
-            anchor = _github_anchor(match.group(1))
+            anchor = _github_anchor(match.group(2))
             anchors.add(f"{anchor}-{seen[anchor]}" if seen[anchor] else anchor)
             seen[anchor] += 1
     return anchors
@@ -143,3 +151,31 @@ def test_readme_links_resolve(name: str) -> None:
             assert (ROOT / path).exists(), f"{name} links to missing {path}"
         else:
             assert anchor in anchors, f"{name} links to missing section #{anchor}"
+
+
+@pytest.mark.parametrize("name", READMES)
+def test_readme_opens_with_the_language_switcher(name: str) -> None:
+    switcher = " | ".join(
+        f"{flag} **{language}**" if readme == name else f"{flag} [{language}]({readme})"
+        for readme, flag, language in LANGUAGES
+    )
+    lines = (ROOT / name).read_text(encoding="utf-8").splitlines()
+    assert lines[:3] == ['<div align="center">', "", switcher]
+
+
+def _skeleton(markdown: str) -> dict[str, object]:
+    """What a faithful translation keeps: sections, code blocks, tables and file links."""
+    prose = _prose_lines(markdown)
+    files = re.findall(r"\]\(((?!README|#|[a-z][a-z0-9+.-]*:)[^)\s]+)\)", "\n".join(prose))
+    return {
+        "heading levels": [len(m.group(1)) for line in prose if (m := _HEADING.match(line))],
+        "code blocks": sum(1 for line in markdown.splitlines() if _FENCE.match(line)) // 2,
+        "table rows": sum(1 for line in prose if line.startswith("|")),
+        "file links": sorted(files),
+    }
+
+
+@pytest.mark.parametrize("name", READMES[1:])
+def test_translations_follow_the_english_readme(name: str) -> None:
+    english = _skeleton((ROOT / "README.md").read_text(encoding="utf-8"))
+    assert _skeleton((ROOT / name).read_text(encoding="utf-8")) == english

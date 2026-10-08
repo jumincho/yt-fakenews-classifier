@@ -1,6 +1,6 @@
 <div align="center">
 
-🇺🇸 [English](README.md) | 🇨🇳 [简体中文](README.zh-CN.md) | 🇭🇰 **繁體中文** | 🇯🇵 [日本語](README.ja.md) | 🇰🇷 [한국어](README.ko.md)
+🇺🇸 [English](README.md) | 🇰🇷 [한국어](README.ko.md) | 🇨🇳 [简体中文](README.zh-CN.md) | 🇭🇰 **繁體中文** | 🇯🇵 [日本語](README.ja.md)
 
 # yt-fakenews-classifier
 
@@ -102,6 +102,20 @@ for chunk in prediction.chunks:
     print(chunk.start_word, chunk.end_word, round(chunk.p_fake, 3))
 ```
 
+訓練和轉錄同樣可以在 Python 中進行。訓練函數透過 `ytfakenews.config` 內的數據類別（dataclass）接收設定，所有預設值都集中在那裏；`transcribe_source` 則相當於 `run` 的前半部分，即轉錄：
+
+```python
+from ytfakenews.asr import transcribe_source  # 需要 asr 可選依賴
+from ytfakenews.config import BaselineConfig
+from ytfakenews.models.baseline import train_baseline
+
+metrics = train_baseline(output_dir="models/baseline-c16", config=BaselineConfig(c=16.0))
+print(metrics["validation"]["f1"])
+
+transcript, files = transcribe_source("https://www.youtube.com/watch?v=VIDEO_ID", captions=True)
+print(classify_text(transcript.text, classifier).label, files.txt)
+```
+
 ## 訓練與評估
 
 ### 數據
@@ -126,7 +140,7 @@ for chunk in prediction.chunks:
 ```bash
 ytfakenews train baseline               # 預設隨機種子為 42；對應驗證集和測試集的行
 ytfakenews evaluate --chunked           # 轉錄稿的處理流程：清理、300 詞區塊、取平均
-ytfakenews evaluate --max-words 100     # 每篇文章只取前 100 詞（亦有 50、200、300）
+ytfakenews evaluate --max-words 100     # 每篇文章只取前 100 詞（50、200、300 詞的行亦如此）
 ```
 
 | 數據劃分及輸入 | n | 準確率 | 精確率 | 召回率 | F1 | ROC-AUC |
@@ -141,7 +155,7 @@ ytfakenews evaluate --max-words 100     # 每篇文章只取前 100 詞（亦有
 
 在完整的測試集文章上，299 篇 REAL 文章中有 285 篇、307 篇 FAKE 文章中有 295 篇分類正確。較短的輸入會把 REAL 文章推向 FAKE：分塊流程把 299 篇 REAL 測試文章中的 29 篇標為 FAKE，只取前 100 詞時則為 86 篇，而 FAKE 的召回率一直維持在 0.97 以上。ROC-AUC 的跌幅遠小於準確率，顯示若為短輸入另行校準閾值，應可挽回部分損失；不過這項功能尚未實作。
 
-C 是在驗證集上選定的：C = 4 時 F1 為 0.9353，16 時為 0.9467，32 時為 0.9515，128 時為 0.9498（`ytfakenews train baseline --C 16`，如此類推）。測試集並沒有用於任何選擇。以上數字以 Python 3.12、scikit-learn 1.9.1、NumPy 2.5.3 和 pandas 3.0.6 量度所得。CI 每次推送都會重新訓練基線模型，把測試集指標寫入工作摘要，並把 `metrics.json` 檔案作為工件上載。
+C 是在驗證集上選定的：C = 4 時 F1 為 0.9353，16 時為 0.9467，32 時為 0.9515，128 時為 0.9498（`ytfakenews train baseline --C 16`，如此類推）。測試集並沒有用於任何選擇。以上數字以 Python 3.12、scikit-learn 1.9.1、NumPy 2.5.3 和 pandas 3.0.6 量度所得。CI 每次推送都會重新訓練基線模型，把測試集指標寫入工作摘要，並把指標和清單檔案作為工件上載。
 
 ### Transformer 模型
 
@@ -159,7 +173,7 @@ ytfakenews evaluate --model models/transformer --chunked
 
 ## CLI 參考
 
-每個指令都支援 `--help`；`-v` 顯示除錯輸出，`-q` 隱藏進度訊息。結束代碼在成功時為 0，出錯時為 1（錯誤會以一行訊息輸出到 stderr），參數無效時為 2。
+每個指令都支援 `--help`；`-v` 顯示除錯輸出，`-q` 隱藏進度訊息。結束代碼在成功時為 0，出錯時為 1（錯誤會以一行訊息輸出到 stderr），參數無效時為 2，被中斷時為 130。
 
 | 指令 | 用途 | 常用選項 |
 | --- | --- | --- |
@@ -191,29 +205,37 @@ ytfakenews evaluate --model models/transformer --chunked
 
 `run --json` 另外會加入 `source`、`video`（ID、標題、網址、頻道、片長、上載日期）和 `transcript`（來源、語言、詳情、片段數目和檔案路徑）。
 
-訓練好的模型目錄內有模型檔案、`metrics.json`，以及一個 `manifest.json`，後者記錄後端、設定和數據來源（數據集路徑及 SHA-256、清理統計和數據劃分）；`evaluate` 會據此重建完全相同的數據劃分。模型經由 joblib（pickle）或 PyTorch 載入，所以只應載入你信任的模型目錄。
+訓練好的模型目錄內有模型檔案、`metrics.json`，以及一個 `manifest.json`，後者記錄後端、設定、數據來源（數據集路徑及 SHA-256、清理統計和數據劃分），以及 Python 和主要程式庫的版本；`evaluate` 會據此重建完全相同的數據劃分。模型經由 joblib（pickle）或 PyTorch 載入，所以只應載入你信任的模型目錄。
 
 ## 項目結構
 
 ```text
 yt-fakenews-classifier/
 ├── src/ytfakenews/
-│   ├── cli.py            命令列介面
-│   ├── transcribe.py     yt-dlp 下載、faster-whisper、YouTube 字幕
-│   ├── text.py           SRT/WebVTT 解析、清理、分塊
-│   ├── data.py           數據集載入、清理及劃分
-│   ├── baseline.py       TF-IDF + 邏輯迴歸
-│   ├── transformer.py    Transformer 微調及推論（延遲匯入）
-│   ├── predict.py        通用分類器介面、區塊彙總
-│   ├── evaluation.py     評估指標
-│   ├── artifacts.py      模型目錄清單
-│   ├── errors.py         面向用戶的例外
-│   └── _optional.py      可選依賴的匯入
-├── tests/                離線 pytest 測試套件及測試夾具
-├── data/                 fake_or_real_news.zip
-├── examples/             兩份虛構的轉錄稿
-├── notebooks/            colab_quickstart.ipynb
-├── .github/workflows/    ci.yml
+│   ├── cli/                命令列介面
+│   │   ├── parser.py       指令與選項
+│   │   ├── commands.py     每個指令的實際操作
+│   │   └── output.py       表格、判定結果和 JSON 輸出
+│   ├── asr/                語音轉文字（asr 可選依賴）
+│   │   ├── youtube.py      yt-dlp：下載音訊、擷取字幕
+│   │   ├── whisper.py      faster-whisper 轉錄
+│   │   └── transcript.py   轉錄稿類型及 .txt/.srt/.json 檔案
+│   ├── models/             分類器協定、後端註冊表、load_classifier
+│   │   ├── baseline.py     TF-IDF + 邏輯迴歸
+│   │   └── transformer.py  微調及推論（transformer 可選依賴）
+│   ├── config.py           路徑、數據劃分及超參數預設值
+│   ├── data.py             數據集載入、清理及劃分
+│   ├── text.py             SRT/WebVTT 解析、清理、分塊
+│   ├── predict.py          適用於所有後端的區塊評分及取平均
+│   ├── evaluation.py       評估指標
+│   ├── artifacts.py        模型目錄：manifest.json、metrics.json
+│   ├── errors.py           面向用戶的例外
+│   └── _optional.py        可選依賴的匯入
+├── tests/                  離線 pytest 測試套件及測試夾具
+├── data/                   fake_or_real_news.zip
+├── examples/               兩份虛構的轉錄稿
+├── notebooks/              colab_quickstart.ipynb
+├── .github/workflows/      ci.yml
 └── pyproject.toml
 ```
 
@@ -222,11 +244,11 @@ yt-fakenews-classifier/
 ```bash
 pip install -e ".[dev]"
 ruff check . && ruff format --check .
-mypy        # 嚴格模式，檢查 src/ytfakenews
+mypy        # 嚴格模式，檢查套件和測試
 pytest      # 離線執行；需要某個可選依賴的測試，在未安裝該依賴時會略過
 ```
 
-完整測試套件另外包括 Transformer 冒煙測試（一個隨機初始化的微型 BERT，配上即場建立的分詞器），並以本地 HTTP 伺服器測試真正的 yt-dlp 和 faster-whisper：
+完整測試套件另外包括 Transformer 冒煙測試（一個隨機初始化的微型 BERT，配上即場建立的分詞器），並用真正的 yt-dlp 從本地 HTTP 伺服器下載檔案，以及用真正的 faster-whisper 解碼音訊：
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cpu

@@ -1,6 +1,6 @@
 <div align="center">
 
-🇺🇸 [English](README.md) | 🇨🇳 [简体中文](README.zh-CN.md) | 🇭🇰 [繁體中文](README.zh-HK.md) | 🇯🇵 [日本語](README.ja.md) | 🇰🇷 **한국어**
+🇺🇸 [English](README.md) | 🇰🇷 **한국어** | 🇨🇳 [简体中文](README.zh-CN.md) | 🇭🇰 [繁體中文](README.zh-HK.md) | 🇯🇵 [日本語](README.ja.md)
 
 # yt-fakenews-classifier
 
@@ -76,7 +76,7 @@ chunk  words        P(fake)  preview
     4  353-503        0.967  leave the house. And who gets that data? Nobody will answer that ...
 ```
 
-따로 점수를 매기면 [지역 뉴스 전사본](examples/transcript_local_news.txt)은 REAL(P(fake) = 0.356), [선정적인 전사본](examples/transcript_sensational.txt)은 FAKE(0.977)로 레이블됩니다. 두 전사본 모두 이 저장소를 위해 작성한 것이며 실제로 있었던 일은 전혀 다루지 않습니다.
+따로 점수를 매기면 [지역 뉴스 전사본](examples/transcript_local_news.txt)은 REAL(P(fake) = 0.356), [선정적인 전사본](examples/transcript_sensational.txt)은 FAKE(0.977)로 분류됩니다. 두 전사본 모두 이 저장소를 위해 작성한 것이며 실제로 있었던 일은 전혀 다루지 않습니다.
 
 ### 설치 옵션
 
@@ -100,6 +100,20 @@ prediction = classify_text(read_transcript("examples/transcript_sensational.txt"
 print(prediction.label, round(prediction.p_fake, 3))  # FAKE 0.977
 for chunk in prediction.chunks:
     print(chunk.start_word, chunk.end_word, round(chunk.p_fake, 3))
+```
+
+학습과 전사도 Python에서 할 수 있습니다. 학습 함수는 모든 기본값을 담고 있는 `ytfakenews.config`의 데이터클래스로 설정을 받고, `transcribe_source`는 `run`의 앞부분인 전사 단계를 수행합니다.
+
+```python
+from ytfakenews.asr import transcribe_source  # asr extra가 필요합니다
+from ytfakenews.config import BaselineConfig
+from ytfakenews.models.baseline import train_baseline
+
+metrics = train_baseline(output_dir="models/baseline-c16", config=BaselineConfig(c=16.0))
+print(metrics["validation"]["f1"])
+
+transcript, files = transcribe_source("https://www.youtube.com/watch?v=VIDEO_ID", captions=True)
+print(classify_text(transcript.text, classifier).label, files.txt)
 ```
 
 ## 학습과 평가
@@ -126,7 +140,7 @@ for chunk in prediction.chunks:
 ```bash
 ytfakenews train baseline               # 기본 시드 42, 검증 및 테스트 행
 ytfakenews evaluate --chunked           # 전사본 경로: 정리, 300단어 청크, 평균
-ytfakenews evaluate --max-words 100     # 각 기사의 처음 100단어만 사용(50, 200, 300도 가능)
+ytfakenews evaluate --max-words 100     # 각 기사의 처음 100단어만 사용(50, 200, 300단어 행도 같은 방식)
 ```
 
 | 분할 및 입력 | n | 정확도 | 정밀도 | 재현율 | F1 | ROC-AUC |
@@ -139,9 +153,9 @@ ytfakenews evaluate --max-words 100     # 각 기사의 처음 100단어만 사�
 | 테스트, 처음 100단어 | 606 | 0.8498 | 0.7784 | 0.9837 | 0.8691 | 0.9759 |
 | 테스트, 처음 50단어 | 606 | 0.7970 | 0.7170 | 0.9902 | 0.8317 | 0.9664 |
 
-테스트 기사 전체에서는 REAL 기사 299건 중 285건, FAKE 기사 307건 중 295건이 올바르게 분류됩니다. 입력이 짧아지면 REAL 기사가 FAKE 쪽으로 밀립니다. 청크 경로는 REAL 테스트 기사 299건 중 29건을 FAKE로 레이블하고, 처음 100단어만 쓰면 이 수가 86건이 되지만, FAKE 재현율은 0.97보다 높게 유지됩니다. ROC-AUC는 정확도보다 훨씬 적게 떨어지는데, 이는 짧은 입력에 맞춰 보정한 임계값이 손실의 일부를 되찾을 수 있음을 시사합니다. 다만 이는 구현되어 있지 않습니다.
+테스트 기사를 전문으로 입력하면 REAL 기사 299건 중 285건, FAKE 기사 307건 중 295건이 올바르게 분류됩니다. 입력이 짧아지면 REAL 기사가 FAKE 쪽으로 밀립니다. 청크 경로는 REAL 테스트 기사 299건 중 29건을 FAKE로 분류하고, 처음 100단어만 쓰면 이 수가 86건이 되지만, FAKE 재현율은 0.97보다 높게 유지됩니다. ROC-AUC는 정확도보다 훨씬 적게 떨어지는데, 이는 짧은 입력에 맞춰 보정한 임계값이 손실의 일부를 되찾을 수 있음을 시사합니다. 다만 이는 구현되어 있지 않습니다.
 
-C는 검증 세트에서 골랐습니다. 검증 세트의 F1은 C = 4일 때 0.9353, 16일 때 0.9467, 32일 때 0.9515, 128일 때 0.9498입니다(`ytfakenews train baseline --C 16` 등). 테스트 세트는 어떤 선택에도 쓰지 않았습니다. 수치는 Python 3.12, scikit-learn 1.9.1, NumPy 2.5.3, pandas 3.0.6으로 측정했습니다. CI는 푸시할 때마다 베이스라인을 다시 학습하고, 테스트 지표를 작업 요약에 기록하며, `metrics.json` 파일을 아티팩트로 업로드합니다.
+C는 검증 세트에서 골랐습니다. 검증 세트의 F1은 C = 4일 때 0.9353, 16일 때 0.9467, 32일 때 0.9515, 128일 때 0.9498입니다(`ytfakenews train baseline --C 16` 등). 테스트 세트는 어떤 선택에도 쓰지 않았습니다. 수치는 Python 3.12, scikit-learn 1.9.1, NumPy 2.5.3, pandas 3.0.6으로 측정했습니다. CI는 푸시할 때마다 베이스라인을 다시 학습하고, 테스트 지표를 작업 요약에 기록하며, 지표와 매니페스트를 아티팩트로 업로드합니다.
 
 ### 트랜스포머 모델
 
@@ -159,7 +173,7 @@ ytfakenews evaluate --model models/transformer --chunked
 
 ## CLI 레퍼런스
 
-모든 명령에 `--help`가 있습니다. `-v`는 디버그 출력을 보여 주고 `-q`는 진행 메시지를 숨깁니다. 종료 코드는 성공하면 0, 오류가 나면 1(stderr에 한 줄로 보고), 인수가 잘못되면 2입니다.
+모든 명령에 `--help`가 있습니다. `-v`는 디버그 출력을 보여 주고 `-q`는 진행 메시지를 숨깁니다. 종료 코드는 성공하면 0, 오류가 나면 1(stderr에 한 줄로 보고), 인수가 잘못되면 2, 실행이 중단되면 130입니다.
 
 | 명령 | 하는 일 | 주로 쓰는 옵션 |
 | --- | --- | --- |
@@ -191,29 +205,37 @@ ytfakenews evaluate --model models/transformer --chunked
 
 `run --json`은 여기에 `source`, `video`(ID, 제목, URL, 채널, 길이, 업로드 날짜), `transcript`(출처, 언어, 세부 정보, 세그먼트 수, 파일 경로)를 추가합니다.
 
-학습된 모델 디렉터리에는 모델 파일, `metrics.json`, 그리고 백엔드와 설정, 데이터 출처(데이터셋 경로와 SHA-256, 정리 통계, 분할)를 기록한 `manifest.json`이 들어 있습니다. `evaluate`는 이 파일로 분할을 정확히 다시 만듭니다. 모델은 joblib(pickle) 또는 PyTorch로 불러오므로 신뢰할 수 있는 모델 디렉터리만 불러오십시오.
+학습된 모델 디렉터리에는 모델 파일, `metrics.json`, 그리고 백엔드, 설정, 데이터 출처(데이터셋 경로와 SHA-256, 정리 통계, 분할), Python과 주요 라이브러리의 버전을 기록한 `manifest.json`이 들어 있습니다. `evaluate`는 이 파일로 분할을 정확히 다시 만듭니다. 모델은 joblib(pickle) 또는 PyTorch로 불러오므로 신뢰할 수 있는 모델 디렉터리만 불러오십시오.
 
 ## 프로젝트 구조
 
 ```text
 yt-fakenews-classifier/
 ├── src/ytfakenews/
-│   ├── cli.py            명령줄 인터페이스
-│   ├── transcribe.py     yt-dlp 다운로드, faster-whisper, YouTube 자막
-│   ├── text.py           SRT/WebVTT 파싱, 정리, 청크 분할
-│   ├── data.py           데이터셋 불러오기, 정리, 분할
-│   ├── baseline.py       TF-IDF + 로지스틱 회귀
-│   ├── transformer.py    트랜스포머 파인튜닝과 추론(지연 임포트)
-│   ├── predict.py        공통 분류기 인터페이스, 청크 집계
-│   ├── evaluation.py     평가 지표
-│   ├── artifacts.py      모델 디렉터리 매니페스트
-│   ├── errors.py         사용자에게 보여 주는 예외
-│   └── _optional.py      선택적 의존성 임포트
-├── tests/                오프라인 pytest 테스트 모음과 픽스처
-├── data/                 fake_or_real_news.zip
-├── examples/             가상의 전사본 두 개
-├── notebooks/            colab_quickstart.ipynb
-├── .github/workflows/    ci.yml
+│   ├── cli/                명령줄 인터페이스
+│   │   ├── parser.py       명령과 옵션
+│   │   ├── commands.py     각 명령이 하는 일
+│   │   └── output.py       표, 판정 결과, JSON 출력
+│   ├── asr/                음성 인식(asr extra)
+│   │   ├── youtube.py      yt-dlp: 오디오 다운로드와 자막
+│   │   ├── whisper.py      faster-whisper 전사
+│   │   └── transcript.py   전사본 타입과 .txt/.srt/.json 파일
+│   ├── models/             분류기 프로토콜, 백엔드 레지스트리, load_classifier
+│   │   ├── baseline.py     TF-IDF + 로지스틱 회귀
+│   │   └── transformer.py  파인튜닝과 추론(transformer extra)
+│   ├── config.py           경로, 데이터 분할, 하이퍼파라미터 기본값
+│   ├── data.py             데이터셋 불러오기, 정리, 분할
+│   ├── text.py             SRT/WebVTT 파싱, 정리, 청크 분할
+│   ├── predict.py          모든 백엔드에 공통인 청크 채점과 평균
+│   ├── evaluation.py       평가 지표
+│   ├── artifacts.py        모델 디렉터리: manifest.json, metrics.json
+│   ├── errors.py           사용자에게 보여 주는 예외
+│   └── _optional.py        선택적 의존성 임포트
+├── tests/                  오프라인 pytest 테스트 모음과 픽스처
+├── data/                   fake_or_real_news.zip
+├── examples/               가상의 전사본 두 개
+├── notebooks/              colab_quickstart.ipynb
+├── .github/workflows/      ci.yml
 └── pyproject.toml
 ```
 
@@ -222,11 +244,11 @@ yt-fakenews-classifier/
 ```bash
 pip install -e ".[dev]"
 ruff check . && ruff format --check .
-mypy        # strict 모드, 대상은 src/ytfakenews
+mypy        # strict 모드, 패키지와 테스트 모두 검사
 pytest      # 오프라인, extra가 필요한 테스트는 그 extra가 없으면 건너뜀
 ```
 
-전체 테스트 모음에는 트랜스포머 스모크 테스트(무작위로 초기화한 작은 BERT와 즉석에서 만든 토크나이저 사용)가 추가되고, 로컬 HTTP 서버를 상대로 실제 yt-dlp와 faster-whisper도 검사합니다.
+전체 테스트 모음에는 트랜스포머 스모크 테스트(무작위로 초기화한 작은 BERT와 즉석에서 만든 토크나이저 사용)가 추가되고, 실제 yt-dlp로 로컬 HTTP 서버에서 내려받는 과정과 실제 faster-whisper로 오디오를 디코딩하는 과정도 검사합니다.
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cpu
@@ -241,7 +263,7 @@ YTFAKENEWS_REQUIRE_EXTRAS=1 HF_HUB_OFFLINE=1 pytest
 - **의도된 용도**: 교육과 실험, 예를 들어 한 도메인에서 학습한 분류기가 다른 도메인에서 어떻게 동작하는지 연구하는 용도입니다. 콘텐츠 모더레이션, 팩트체크, 사람이나 채널에 관한 결정에는 적합하지 않습니다.
 - **학습 데이터**: 약 6천 건의 영어 기사로, 대부분 2016년 선거 전후의 미국 정치를 다루며, 각 기사 전체에 REAL 또는 FAKE 레이블이 붙어 있습니다. 다른 시기, 주제, 국가는 분포 밖에 있습니다.
 - **베이스라인이 학습한 것**: 가장 강한 FAKE 특성에는 "2016", "october", "november 2016", "share", "print", "via", "source"가 있고, 가장 강한 REAL 특성에는 "said", "percent", "tuesday", "gop", "sen"이 있습니다(전체 목록은 학습 후 `models/baseline/metrics.json`에 있습니다). 이들은 날짜, 수집된 웹 페이지의 잔재, 통신사 기사 특유의 표현으로, 텍스트가 어디서 언제 발행되었는지에 관한 단서이지 그 내용이 사실인지에 관한 단서가 아닙니다. 높은 테스트 점수가 주로 보여 주는 것은 이런 단서가 두 웹사이트 집단을 얼마나 잘 구분하는지입니다.
-- **기사에서 음성으로**: 전사본에는 헤드라인이나 바이라인이 없고, 구어체를 쓰며, 인식 오류가 있고 문장 부호가 거의 없습니다. 점수는 전사본에 맞게 보정되어 있지 않습니다. 기사에서도 이미 청크 분할과 짧은 입력이 예측을 FAKE 쪽으로 옮기므로(결과 표 참고), 짧은 동영상일수록 FAKE로 레이블될 가능성이 큽니다.
+- **기사에서 음성으로**: 전사본에는 헤드라인이나 바이라인이 없고, 구어체를 쓰며, 인식 오류가 있고 문장 부호가 거의 없습니다. 점수는 전사본에 맞게 보정되어 있지 않습니다. 기사에서도 이미 청크 분할과 짧은 입력이 예측을 FAKE 쪽으로 옮기므로(결과 표 참고), 짧은 동영상일수록 FAKE로 분류될 가능성이 큽니다.
 - **언어**: 학습 데이터는 영어입니다. `--translate`와 다국어 트랜스포머는 다른 언어를 처리하는 두 가지 방법이지만, 어느 쪽도 이 작업에 대해 평가되지 않았습니다.
 - **전사본**: Whisper와 YouTube 자동 자막 모두 인식 오류를 냅니다. 또한 실제로 말한 언어가 아닌 다른 언어의 자동 자막은 기계 번역입니다.
 - **레이블은 사실 판정이 아님**: FAKE는 "학습 데이터의 FAKE 기사와 닮았다"는 뜻입니다. 이를 동영상이 거짓이라는 주장으로 공표하거나 그에 근거해 행동하지 마십시오.

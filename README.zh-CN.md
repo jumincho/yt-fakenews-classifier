@@ -1,6 +1,6 @@
 <div align="center">
 
-🇺🇸 [English](README.md) | 🇨🇳 **简体中文** | 🇭🇰 [繁體中文](README.zh-HK.md) | 🇯🇵 [日本語](README.ja.md) | 🇰🇷 [한국어](README.ko.md)
+🇺🇸 [English](README.md) | 🇰🇷 [한국어](README.ko.md) | 🇨🇳 **简体中文** | 🇭🇰 [繁體中文](README.zh-HK.md) | 🇯🇵 [日本語](README.ja.md)
 
 # yt-fakenews-classifier
 
@@ -41,11 +41,11 @@ flowchart LR
     scores --> verdict(["平均值 >= 0.5：FAKE<br/>否则为 REAL"])
 ```
 
-- **下载**：yt-dlp 的 Python API 获取最佳的纯音频流。整个过程不做任何重新编码，因此不需要 ffmpeg。也可以用本地的音频或视频文件代替 URL。
+- **下载**：通过 yt-dlp 的 Python API 获取最佳的纯音频流。整个过程不做任何重新编码，因此不需要 ffmpeg。也可以用本地的音频或视频文件代替 URL。
 - **语音转文字**：faster-whisper 在 CTranslate2 上运行 Whisper（默认使用 `small` 模型），并启用 Silero 语音活动检测过滤器；它用 PyAV 解码音频，因此既不需要 ffmpeg，也不需要 PyTorch。`--translate` 会让 Whisper 直接转录成英文。
 - **字幕**（`--captions`）：上传者提供的字幕优先于 YouTube 的自动字幕。自动字幕中因滚动显示而产生的重复内容会被去除；由 YouTube 机器翻译的字幕轨道会在转录文本的 JSON 中标注出来。
 - **清理与分块**：时间戳、格式标签、`[Music]` 这类标注以及 `>>` 说话人标记都会被删除。随后，用尽可能少的 300 词窗口覆盖全文，相邻窗口至少重叠 50 词；各窗口间隔均匀，因此不会出现很短的末尾文本块。
-- **分类**：每个文本块都会得到一个 P(fake)。转录文本的 P(fake) 是这些值的平均值；平均值至少为 0.5（`--threshold`）时，标签为 FAKE。取平均值意味着视频的每个部分权重相同；每个文本块的得分则显示判定结果从何而来。
+- **分类**：每个文本块都会得到一个 P(fake)。转录文本的 P(fake) 是这些值的平均值；平均值不低于 0.5（`--threshold`）时，标签为 FAKE。取平均值意味着视频的每个部分权重相同；每个文本块的得分则显示判定结果从何而来。
 
 ## 快速开始
 
@@ -102,6 +102,20 @@ for chunk in prediction.chunks:
     print(chunk.start_word, chunk.end_word, round(chunk.p_fake, 3))
 ```
 
+训练和转录同样可以在 Python 中完成。训练函数通过 `ytfakenews.config` 中的数据类接收设置，所有默认值都集中定义在那里；`transcribe_source` 则对应 `run` 的前半部分，即转录：
+
+```python
+from ytfakenews.asr import transcribe_source  # 需要 asr 可选依赖
+from ytfakenews.config import BaselineConfig
+from ytfakenews.models.baseline import train_baseline
+
+metrics = train_baseline(output_dir="models/baseline-c16", config=BaselineConfig(c=16.0))
+print(metrics["validation"]["f1"])
+
+transcript, files = transcribe_source("https://www.youtube.com/watch?v=VIDEO_ID", captions=True)
+print(classify_text(transcript.text, classifier).label, files.txt)
+```
+
 ## 训练与评估
 
 ### 数据
@@ -126,7 +140,7 @@ for chunk in prediction.chunks:
 ```bash
 ytfakenews train baseline               # 默认随机种子为 42；对应验证集和测试集的行
 ytfakenews evaluate --chunked           # 转录文本的处理路径：清理、300 词文本块、取平均
-ytfakenews evaluate --max-words 100     # 每篇文章只取前 100 词（另有 50、200、300）
+ytfakenews evaluate --max-words 100     # 每篇文章只取前 100 词（50、200、300 词的行同理）
 ```
 
 | 数据划分与输入 | n | 准确率 | 精确率 | 召回率 | F1 | ROC-AUC |
@@ -139,9 +153,9 @@ ytfakenews evaluate --max-words 100     # 每篇文章只取前 100 词（另有
 | 测试集，前 100 词 | 606 | 0.8498 | 0.7784 | 0.9837 | 0.8691 | 0.9759 |
 | 测试集，前 50 词 | 606 | 0.7970 | 0.7170 | 0.9902 | 0.8317 | 0.9664 |
 
-在完整的测试集文章上，299 篇 REAL 文章中有 285 篇、307 篇 FAKE 文章中有 295 篇被正确分类。较短的输入会把 REAL 文章推向 FAKE：分块路径把 299 篇 REAL 测试文章中的 29 篇标为 FAKE，只取前 100 词时则为 86 篇，而 FAKE 的召回率始终保持在 0.97 以上。ROC-AUC 的降幅远小于准确率，这意味着针对短输入校准的阈值有望挽回一部分损失；不过这一点尚未实现。
+在完整的测试集文章上，299 篇 REAL 文章中有 285 篇、307 篇 FAKE 文章中有 295 篇被正确分类。较短的输入会把 REAL 文章推向 FAKE：分块路径把 299 篇 REAL 测试文章中的 29 篇标为 FAKE，只取前 100 词时则为 86 篇，而 FAKE 的召回率始终保持在 0.97 以上。ROC-AUC 的降幅远小于准确率，这表明针对短输入校准的阈值有望挽回一部分损失；不过这一点尚未实现。
 
-C 是在验证集上选定的：C = 4 时 F1 为 0.9353，16 时为 0.9467，32 时为 0.9515，128 时为 0.9498（`ytfakenews train baseline --C 16`，依此类推）。测试集没有用于任何选择。以上数字是在 Python 3.12、scikit-learn 1.9.1、NumPy 2.5.3 和 pandas 3.0.6 环境下测得的。CI 在每次推送时都会重新训练基线模型，把测试集指标写入作业摘要，并将 `metrics.json` 文件作为工件上传。
+C 是在验证集上选定的：C = 4 时 F1 为 0.9353，16 时为 0.9467，32 时为 0.9515，128 时为 0.9498（`ytfakenews train baseline --C 16`，依此类推）。测试集没有用于任何选择。以上数字是在 Python 3.12、scikit-learn 1.9.1、NumPy 2.5.3 和 pandas 3.0.6 环境下测得的。CI 在每次推送时都会重新训练基线模型，把测试集指标写入作业摘要，并将指标和清单文件作为工件上传。
 
 ### Transformer 模型
 
@@ -159,7 +173,7 @@ ytfakenews evaluate --model models/transformer --chunked
 
 ## CLI 参考
 
-每个命令都支持 `--help`；`-v` 显示调试输出，`-q` 隐藏进度信息。退出码在成功时为 0，出错时为 1（错误信息以一行输出到 stderr），参数无效时为 2。
+每个命令都支持 `--help`；`-v` 显示调试输出，`-q` 隐藏进度信息。退出码在成功时为 0，出错时为 1（错误信息以一行输出到 stderr），参数无效时为 2，被中断时为 130。
 
 | 命令 | 作用 | 常用选项 |
 | --- | --- | --- |
@@ -191,29 +205,37 @@ ytfakenews evaluate --model models/transformer --chunked
 
 `run --json` 还会加入 `source`、`video`（ID、标题、URL、频道、时长、上传日期）和 `transcript`（来源、语言、详细信息、片段数和文件路径）。
 
-训练好的模型目录包含模型文件、`metrics.json`，以及一个 `manifest.json`，后者记录后端、配置和数据来源（数据集路径及 SHA-256、清洗统计和数据划分）；`evaluate` 依据它精确重建数据划分。模型通过 joblib（pickle）或 PyTorch 加载，因此只应加载你信任的模型目录。
+训练好的模型目录包含模型文件、`metrics.json`，以及一个 `manifest.json`，后者记录后端、配置、数据来源（数据集路径及 SHA-256、清洗统计和数据划分）以及 Python 和主要库的版本；`evaluate` 依据它精确重建数据划分。模型通过 joblib（pickle）或 PyTorch 加载，因此只应加载你信任的模型目录。
 
 ## 项目结构
 
 ```text
 yt-fakenews-classifier/
 ├── src/ytfakenews/
-│   ├── cli.py            命令行界面
-│   ├── transcribe.py     yt-dlp 下载、faster-whisper、YouTube 字幕
-│   ├── text.py           SRT/WebVTT 解析、清理、分块
-│   ├── data.py           数据集加载、清洗和划分
-│   ├── baseline.py       TF-IDF + 逻辑回归
-│   ├── transformer.py    Transformer 微调与推理（延迟导入）
-│   ├── predict.py        通用分类器接口、文本块汇总
-│   ├── evaluation.py     评估指标
-│   ├── artifacts.py      模型目录清单
-│   ├── errors.py         面向用户的异常
-│   └── _optional.py      可选依赖的导入
-├── tests/                离线 pytest 测试套件和测试夹具
-├── data/                 fake_or_real_news.zip
-├── examples/             两份虚构的转录文本
-├── notebooks/            colab_quickstart.ipynb
-├── .github/workflows/    ci.yml
+│   ├── cli/                命令行界面
+│   │   ├── parser.py       命令与选项
+│   │   ├── commands.py     各命令的具体操作
+│   │   └── output.py       表格、判定结果和 JSON 输出
+│   ├── asr/                语音转文字（asr 可选依赖）
+│   │   ├── youtube.py      yt-dlp：下载音频、获取字幕
+│   │   ├── whisper.py      faster-whisper 转录
+│   │   └── transcript.py   转录文本类型及 .txt/.srt/.json 文件
+│   ├── models/             分类器协议、后端注册表、load_classifier
+│   │   ├── baseline.py     TF-IDF + 逻辑回归
+│   │   └── transformer.py  微调与推理（transformer 可选依赖）
+│   ├── config.py           路径、数据划分和超参数默认值
+│   ├── data.py             数据集加载、清洗和划分
+│   ├── text.py             SRT/WebVTT 解析、清理、分块
+│   ├── predict.py          适用于所有后端的文本块打分与取平均
+│   ├── evaluation.py       评估指标
+│   ├── artifacts.py        模型目录：manifest.json、metrics.json
+│   ├── errors.py           面向用户的异常
+│   └── _optional.py        可选依赖的导入
+├── tests/                  离线 pytest 测试套件和测试夹具
+├── data/                   fake_or_real_news.zip
+├── examples/               两份虚构的转录文本
+├── notebooks/              colab_quickstart.ipynb
+├── .github/workflows/      ci.yml
 └── pyproject.toml
 ```
 
@@ -222,11 +244,11 @@ yt-fakenews-classifier/
 ```bash
 pip install -e ".[dev]"
 ruff check . && ruff format --check .
-mypy        # 严格模式，检查 src/ytfakenews
+mypy        # 严格模式，检查包和测试
 pytest      # 离线运行；需要某个可选依赖的测试在未安装该依赖时会被跳过
 ```
 
-完整测试套件还会加入 Transformer 冒烟测试（使用一个随机初始化的微型 BERT 和一个即时构建的分词器），并借助本地 HTTP 服务器检验真实的 yt-dlp 和 faster-whisper：
+完整测试套件还会加入 Transformer 冒烟测试（使用一个随机初始化的微型 BERT 和一个即时构建的分词器），用真实的 yt-dlp 从本地 HTTP 服务器下载文件，并用真实的 faster-whisper 解码音频：
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cpu

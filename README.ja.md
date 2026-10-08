@@ -1,6 +1,6 @@
 <div align="center">
 
-🇺🇸 [English](README.md) | 🇨🇳 [简体中文](README.zh-CN.md) | 🇭🇰 [繁體中文](README.zh-HK.md) | 🇯🇵 **日本語** | 🇰🇷 [한국어](README.ko.md)
+🇺🇸 [English](README.md) | 🇰🇷 [한국어](README.ko.md) | 🇨🇳 [简体中文](README.zh-CN.md) | 🇭🇰 [繁體中文](README.zh-HK.md) | 🇯🇵 **日本語**
 
 # yt-fakenews-classifier
 
@@ -102,6 +102,20 @@ for chunk in prediction.chunks:
     print(chunk.start_word, chunk.end_word, round(chunk.p_fake, 3))
 ```
 
+学習と文字起こしも Python から実行できます。学習関数は、すべてのデフォルト値をまとめた `ytfakenews.config` のデータクラスで設定を受け取ります。`transcribe_source` は `run` の前半、つまり文字起こしの部分にあたります。
+
+```python
+from ytfakenews.asr import transcribe_source  # asr extra が必要
+from ytfakenews.config import BaselineConfig
+from ytfakenews.models.baseline import train_baseline
+
+metrics = train_baseline(output_dir="models/baseline-c16", config=BaselineConfig(c=16.0))
+print(metrics["validation"]["f1"])
+
+transcript, files = transcribe_source("https://www.youtube.com/watch?v=VIDEO_ID", captions=True)
+print(classify_text(transcript.text, classifier).label, files.txt)
+```
+
 ## 学習と評価
 
 ### データ
@@ -126,7 +140,7 @@ for chunk in prediction.chunks:
 ```bash
 ytfakenews train baseline               # デフォルトのシードは 42。検証とテストの行
 ytfakenews evaluate --chunked           # 文字起こしと同じ経路：クリーンアップ、300 語のチャンク、平均
-ytfakenews evaluate --max-words 100     # 各記事の最初の 100 語だけ（50、200、300 も）
+ytfakenews evaluate --max-words 100     # 各記事の最初の 100 語だけ（50、200、300 語の行も同様）
 ```
 
 | 分割と入力 | n | 正解率 | 適合率 | 再現率 | F1 | ROC-AUC |
@@ -141,7 +155,7 @@ ytfakenews evaluate --max-words 100     # 各記事の最初の 100 語だけ（
 
 テスト記事の全文では、REAL 記事 299 件中 285 件、FAKE 記事 307 件中 295 件が正しく分類されます。入力が短くなると、REAL 記事は FAKE 側に押しやられます。チャンク経路では REAL のテスト記事 299 件のうち 29 件が FAKE と判定され、最初の 100 語だけでは 86 件になりますが、FAKE の再現率は 0.97 を上回ったままです。ROC-AUC の低下は正解率よりずっと小さく、短い入力向けにキャリブレーションしたしきい値を使えば損失の一部を取り戻せることを示唆しています。ただし、それは実装していません。
 
-C は検証データで選びました。検証データでの F1 は C = 4 で 0.9353、16 で 0.9467、32 で 0.9515、128 で 0.9498 です（`ytfakenews train baseline --C 16` など）。テストデータはどの選択にも使っていません。これらの数値は Python 3.12、scikit-learn 1.9.1、NumPy 2.5.3、pandas 3.0.6 で計測しました。CI はプッシュのたびにベースラインを学習し直し、テストの指標をジョブサマリーに書き出し、`metrics.json` ファイルをアーティファクトとしてアップロードします。
+C は検証データで選びました。検証データでの F1 は C = 4 で 0.9353、16 で 0.9467、32 で 0.9515、128 で 0.9498 です（`ytfakenews train baseline --C 16` など）。テストデータはどの選択にも使っていません。これらの数値は Python 3.12、scikit-learn 1.9.1、NumPy 2.5.3、pandas 3.0.6 で計測しました。CI はプッシュのたびにベースラインを学習し直し、テストの指標をジョブサマリーに書き出し、指標とマニフェストをアーティファクトとしてアップロードします。
 
 ### Transformer モデル
 
@@ -159,7 +173,7 @@ ytfakenews evaluate --model models/transformer --chunked
 
 ## CLI リファレンス
 
-すべてのコマンドに `--help` があります。`-v` はデバッグ出力を表示し、`-q` は進捗メッセージを非表示にします。終了コードは成功時に 0、エラー時に 1（エラーは stderr に 1 行で報告されます）、引数が不正な場合に 2 です。
+すべてのコマンドに `--help` があります。`-v` はデバッグ出力を表示し、`-q` は進捗メッセージを非表示にします。終了コードは成功時に 0、エラー時に 1（エラーは stderr に 1 行で報告されます）、引数が不正な場合に 2、中断された場合に 130 です。
 
 | コマンド | 内容 | よく使うオプション |
 | --- | --- | --- |
@@ -191,29 +205,37 @@ ytfakenews evaluate --model models/transformer --chunked
 
 `run --json` では、さらに `source`、`video`（ID、タイトル、URL、チャンネル、長さ、アップロード日）、`transcript`（ソース、言語、詳細、セグメント数、ファイルパス）が加わります。
 
-学習済みモデルのディレクトリには、モデルファイル、`metrics.json`、そしてバックエンド、設定、データの来歴（データセットのパスと SHA-256、クリーニングの統計、分割）を記録した `manifest.json` が入っています。`evaluate` はこれを使って分割を正確に再現します。モデルは joblib（pickle）または PyTorch で読み込むため、信頼できるモデルディレクトリだけを読み込んでください。
+学習済みモデルのディレクトリには、モデルファイル、`metrics.json`、そしてバックエンド、設定、データの来歴（データセットのパスと SHA-256、クリーニングの統計、分割）、Python と主要ライブラリのバージョンを記録した `manifest.json` が入っています。`evaluate` はこれを使って分割を正確に再現します。モデルは joblib（pickle）または PyTorch で読み込むため、信頼できるモデルディレクトリだけを読み込んでください。
 
 ## プロジェクト構成
 
 ```text
 yt-fakenews-classifier/
 ├── src/ytfakenews/
-│   ├── cli.py            コマンドラインインターフェース
-│   ├── transcribe.py     yt-dlp によるダウンロード、faster-whisper、YouTube 字幕
-│   ├── text.py           SRT/WebVTT の解析、クリーンアップ、チャンク分割
-│   ├── data.py           データセットの読み込み、クリーニング、分割
-│   ├── baseline.py       TF-IDF + ロジスティック回帰
-│   ├── transformer.py    Transformer のファインチューニングと推論（遅延インポート）
-│   ├── predict.py        共通の分類器インターフェース、チャンクの集約
-│   ├── evaluation.py     評価指標
-│   ├── artifacts.py      モデルディレクトリのマニフェスト
-│   ├── errors.py         ユーザー向けの例外
-│   └── _optional.py      オプションの依存関係のインポート
-├── tests/                オフラインの pytest テストスイートとフィクスチャ
-├── data/                 fake_or_real_news.zip
-├── examples/             2 つの架空の文字起こし
-├── notebooks/            colab_quickstart.ipynb
-├── .github/workflows/    ci.yml
+│   ├── cli/                コマンドラインインターフェース
+│   │   ├── parser.py       コマンドとオプション
+│   │   ├── commands.py     各コマンドの処理
+│   │   └── output.py       表、判定、JSON の出力
+│   ├── asr/                音声認識（asr extra）
+│   │   ├── youtube.py      yt-dlp：音声のダウンロードと字幕
+│   │   ├── whisper.py      faster-whisper による文字起こし
+│   │   └── transcript.py   文字起こしの型と .txt/.srt/.json ファイル
+│   ├── models/             分類器のプロトコル、バックエンドのレジストリ、load_classifier
+│   │   ├── baseline.py     TF-IDF + ロジスティック回帰
+│   │   └── transformer.py  ファインチューニングと推論（transformer extra）
+│   ├── config.py           パス、データ分割、ハイパーパラメータのデフォルト値
+│   ├── data.py             データセットの読み込み、クリーニング、分割
+│   ├── text.py             SRT/WebVTT の解析、クリーンアップ、チャンク分割
+│   ├── predict.py          全バックエンド共通のチャンクのスコア計算と平均
+│   ├── evaluation.py       評価指標
+│   ├── artifacts.py        モデルディレクトリ：manifest.json、metrics.json
+│   ├── errors.py           ユーザー向けの例外
+│   └── _optional.py        オプションの依存関係のインポート
+├── tests/                  オフラインの pytest テストスイートとフィクスチャ
+├── data/                   fake_or_real_news.zip
+├── examples/               2 つの架空の文字起こし
+├── notebooks/              colab_quickstart.ipynb
+├── .github/workflows/      ci.yml
 └── pyproject.toml
 ```
 
@@ -222,11 +244,11 @@ yt-fakenews-classifier/
 ```bash
 pip install -e ".[dev]"
 ruff check . && ruff format --check .
-mypy        # strict モード、対象は src/ytfakenews
+mypy        # strict モード、対象はパッケージとテスト
 pytest      # オフライン。extra が必要なテストは、その extra がなければスキップされます
 ```
 
-フルスイートには Transformer のスモークテスト（ランダムに初期化した小さな BERT と、その場で構築するトークナイザーを使用）が加わり、ローカル HTTP サーバーを相手に実際の yt-dlp と faster-whisper も検証します。
+フルスイートには Transformer のスモークテスト（ランダムに初期化した小さな BERT と、その場で構築するトークナイザーを使用）が加わり、実際の yt-dlp によるローカル HTTP サーバーからのダウンロードと、実際の faster-whisper による音声のデコードも検証します。
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cpu

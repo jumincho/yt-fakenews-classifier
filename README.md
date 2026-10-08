@@ -1,6 +1,6 @@
 <div align="center">
 
-🇺🇸 **English** | 🇨🇳 [简体中文](README.zh-CN.md) | 🇭🇰 [繁體中文](README.zh-HK.md) | 🇯🇵 [日本語](README.ja.md) | 🇰🇷 [한국어](README.ko.md)
+🇺🇸 **English** | 🇰🇷 [한국어](README.ko.md) | 🇨🇳 [简体中文](README.zh-CN.md) | 🇭🇰 [繁體中文](README.zh-HK.md) | 🇯🇵 [日本語](README.ja.md)
 
 # yt-fakenews-classifier
 
@@ -133,6 +133,22 @@ for chunk in prediction.chunks:
     print(chunk.start_word, chunk.end_word, round(chunk.p_fake, 3))
 ```
 
+Training and transcription work from Python as well. The trainers take the dataclasses of
+`ytfakenews.config`, which hold every default, and `transcribe_source` is the first half of
+`run`:
+
+```python
+from ytfakenews.asr import transcribe_source  # needs the asr extra
+from ytfakenews.config import BaselineConfig
+from ytfakenews.models.baseline import train_baseline
+
+metrics = train_baseline(output_dir="models/baseline-c16", config=BaselineConfig(c=16.0))
+print(metrics["validation"]["f1"])
+
+transcript, files = transcribe_source("https://www.youtube.com/watch?v=VIDEO_ID", captions=True)
+print(classify_text(transcript.text, classifier).label, files.txt)
+```
+
 ## Training and evaluation
 
 ### Data
@@ -186,7 +202,7 @@ C was chosen on the validation split, where F1 is 0.9353 at C = 4, 0.9467 at 16,
 and 0.9498 at 128 (`ytfakenews train baseline --C 16`, and so on). The test split was not used
 for any choice. The numbers were measured with Python 3.12, scikit-learn 1.9.1, NumPy 2.5.3
 and pandas 3.0.6. CI retrains the baseline on every push, puts the test metrics in the job
-summary and uploads the `metrics.json` files as an artifact.
+summary and uploads the metrics and the manifest as an artifact.
 
 ### Transformer
 
@@ -219,8 +235,8 @@ produce an English transcript for either backend.
 ## CLI reference
 
 Every command has `--help`; `-v` shows debug output and `-q` hides progress messages. The exit
-code is 0 on success, 1 on an error (reported in one line on stderr) and 2 for invalid
-arguments.
+code is 0 on success, 1 on an error (reported in one line on stderr), 2 for invalid arguments
+and 130 when interrupted.
 
 | Command | What it does | Options you will use |
 | --- | --- | --- |
@@ -254,31 +270,40 @@ arguments.
 `transcript` (source, language, details, number of segments and file paths).
 
 A trained model directory holds the model files, `metrics.json` and a `manifest.json` that
-records the backend, the configuration and the data provenance (dataset path and SHA-256,
-cleaning statistics and split); `evaluate` uses it to rebuild the exact split. Models are
-loaded with joblib (pickle) or PyTorch, so only load model directories you trust.
+records the backend, the configuration, the data provenance (dataset path and SHA-256,
+cleaning statistics and split) and the versions of Python and the main libraries; `evaluate`
+uses it to rebuild the exact split. Models are loaded with joblib (pickle) or PyTorch, so only
+load model directories you trust.
 
 ## Project structure
 
 ```text
 yt-fakenews-classifier/
 ├── src/ytfakenews/
-│   ├── cli.py            command-line interface
-│   ├── transcribe.py     yt-dlp download, faster-whisper, YouTube captions
-│   ├── text.py           SRT/WebVTT parsing, cleanup, chunking
-│   ├── data.py           dataset loading, cleaning and splitting
-│   ├── baseline.py       TF-IDF + logistic regression
-│   ├── transformer.py    transformer fine-tuning and inference (lazy imports)
-│   ├── predict.py        common classifier interface, chunk aggregation
-│   ├── evaluation.py     metrics
-│   ├── artifacts.py      model directory manifest
-│   ├── errors.py         user-facing exceptions
-│   └── _optional.py      imports of optional dependencies
-├── tests/                offline pytest suite and fixtures
-├── data/                 fake_or_real_news.zip
-├── examples/             two fictional transcripts
-├── notebooks/            colab_quickstart.ipynb
-├── .github/workflows/    ci.yml
+│   ├── cli/                command-line interface
+│   │   ├── parser.py       commands and options
+│   │   ├── commands.py     what each command does
+│   │   └── output.py       tables, verdicts and JSON
+│   ├── asr/                speech-to-text (asr extra)
+│   │   ├── youtube.py      yt-dlp: audio download and captions
+│   │   ├── whisper.py      faster-whisper transcription
+│   │   └── transcript.py   transcript type and its .txt/.srt/.json files
+│   ├── models/             classifier protocol, backend registry, load_classifier
+│   │   ├── baseline.py     TF-IDF + logistic regression
+│   │   └── transformer.py  fine-tuning and inference (transformer extra)
+│   ├── config.py           paths, data split and hyper-parameter defaults
+│   ├── data.py             dataset loading, cleaning and splitting
+│   ├── text.py             SRT/WebVTT parsing, cleanup, chunking
+│   ├── predict.py          chunk scoring and averaging for any backend
+│   ├── evaluation.py       metrics
+│   ├── artifacts.py        model directories: manifest.json, metrics.json
+│   ├── errors.py           user-facing exceptions
+│   └── _optional.py        imports of optional dependencies
+├── tests/                  offline pytest suite and fixtures
+├── data/                   fake_or_real_news.zip
+├── examples/               two fictional transcripts
+├── notebooks/              colab_quickstart.ipynb
+├── .github/workflows/      ci.yml
 └── pyproject.toml
 ```
 
@@ -287,12 +312,13 @@ yt-fakenews-classifier/
 ```bash
 pip install -e ".[dev]"
 ruff check . && ruff format --check .
-mypy        # strict, on src/ytfakenews
+mypy        # strict, on the package and the tests
 pytest      # offline; tests that need an extra are skipped without it
 ```
 
 The full suite adds the transformer smoke test (a tiny random BERT with a tokenizer built on
-the fly) and checks the real yt-dlp and faster-whisper against a local HTTP server:
+the fly), downloads from a local HTTP server with the real yt-dlp and decodes audio with the
+real faster-whisper:
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cpu
