@@ -6,8 +6,8 @@ training configuration, the data provenance (dataset path and SHA-256, cleaning
 statistics and split) and the Python and library versions. Only a directory with a
 manifest is a model, and :func:`save_model_dir` writes the manifest last.
 
-``FORMAT_VERSION`` changes only when a directory written by one version can no longer
-be read by the other; a new optional manifest field does not change it.
+``FORMAT_VERSION`` only changes when old and new code can no longer read each other's
+model directories; an optional new manifest field, such as ``environment``, keeps it.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ MANIFEST_FILE = "manifest.json"
 METRICS_FILE = "metrics.json"
 FORMAT_VERSION = 1
 
-# Distributions whose versions decide whether a saved model loads and what it predicts.
+# Libraries whose versions can change what a model learns or predicts, or whether it loads.
 _RECORDED_PACKAGES = (
     "numpy",
     "pandas",

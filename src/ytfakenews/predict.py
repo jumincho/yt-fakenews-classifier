@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
@@ -57,7 +57,7 @@ class ChunkScore:
 class Prediction:
     """Document-level verdict plus the per-chunk scores it was aggregated from."""
 
-    label: str
+    label: Literal["REAL", "FAKE"]
     p_fake: float
     threshold: float
     n_words: int
