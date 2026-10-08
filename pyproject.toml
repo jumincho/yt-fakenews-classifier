@@ -81,13 +81,15 @@ Source = "https://github.com/jumincho/yt-fakenews-classifier"
 Issues = "https://github.com/jumincho/yt-fakenews-classifier/issues"
 
 [tool.hatch.version]
-path = "src/ytfakenews/__init__.py"
+path = "src/ytfakenews/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ytfakenews"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/src", "/tests", "/README.md", "/LICENSE", "/pyproject.toml"]
+# The tests stay in the repository: they also check the READMEs, the notebook and the
+# examples, which the source distribution does not ship.
+include = ["/src", "/README.md", "/LICENSE", "/pyproject.toml"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

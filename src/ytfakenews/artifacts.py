@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ytfakenews._version import __version__
 from ytfakenews.errors import ModelLoadError
 
 __all__ = [
@@ -84,8 +85,6 @@ def write_manifest(
     directory: str | Path, *, backend: str, config: dict[str, Any], data: dict[str, Any]
 ) -> Manifest:
     """Write ``manifest.json`` into a model directory and return it."""
-    from ytfakenews import __version__  # imported here: the package imports this module
-
     manifest = Manifest(
         backend=backend,
         package_version=__version__,
