@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
+from ytfakenews.errors import EmptyTextError, YTFakeNewsError
 from ytfakenews.predict import Prediction, classify_text, classify_texts
 
 
@@ -71,10 +72,13 @@ def test_empty_text_is_rejected(text: str) -> None:
 
 
 def test_empty_text_in_a_batch_is_named() -> None:
-    with pytest.raises(ValueError, match=r"^text #1 is empty"):
+    with pytest.raises(EmptyTextError, match=r"^text #1 is empty"):
         classify_texts(["fake news", "[Music]"], KeywordClassifier())
-    with pytest.raises(ValueError, match=r"^the text is empty"):
+    with pytest.raises(EmptyTextError, match=r"^the text is empty") as info:
         classify_text("[Music]", KeywordClassifier())
+    # A user error for the CLI, and still a ValueError for callers of the API.
+    assert isinstance(info.value, YTFakeNewsError)
+    assert isinstance(info.value, ValueError)
 
 
 def test_classify_texts_scores_all_chunks_in_one_batch() -> None:

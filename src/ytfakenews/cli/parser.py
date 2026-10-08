@@ -1,18 +1,21 @@
-"""Command-line interface: ``ytfakenews COMMAND [OPTIONS]``."""
+"""The commands of ``ytfakenews`` and their options.
+
+The training options default to the fields of the dataclasses in
+:mod:`ytfakenews.config`, so the CLI and the Python API cannot drift apart. Each
+subcommand stores its handler from :mod:`ytfakenews.cli.commands` as ``args.handler``
+and its ``error`` method as ``args.usage_error``, which handlers call when two options
+contradict each other.
+"""
 
 from __future__ import annotations
 
 import argparse
-import json
-import logging
-import sys
-from collections.abc import Callable, Sequence
-from dataclasses import asdict
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
 
 from ytfakenews import __version__
 from ytfakenews.asr import DEFAULT_TRANSCRIPT_DIR, DEFAULT_WHISPER_MODEL
+from ytfakenews.cli import commands
 from ytfakenews.config import (
     DEFAULT_BASELINE_DIR,
     DEFAULT_DATA_PATH,
@@ -21,21 +24,9 @@ from ytfakenews.config import (
     SplitConfig,
     TransformerConfig,
 )
-from ytfakenews.errors import YTFakeNewsError
-from ytfakenews.models import Classifier
-from ytfakenews.predict import (
-    DEFAULT_CHUNK_WORDS,
-    DEFAULT_OVERLAP,
-    DEFAULT_THRESHOLD,
-    Prediction,
-)
+from ytfakenews.predict import DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP, DEFAULT_THRESHOLD
 
-if TYPE_CHECKING:
-    from ytfakenews.asr import Transcript, TranscriptFiles
-
-__all__ = ["build_parser", "main"]
-
-logger = logging.getLogger("ytfakenews")
+__all__ = ["build_parser"]
 
 DESCRIPTION = """\
 Classify YouTube videos as REAL or FAKE news from what is said in them.
@@ -58,14 +49,12 @@ examples:
 Run `ytfakenews COMMAND --help` for the options of a command.
 """
 
-# The training options default to the fields of the configuration dataclasses, so the
-# CLI and the Python API cannot drift apart.
 _SPLIT = SplitConfig()
 _BASELINE = BaselineConfig()
 _TRANSFORMER = TransformerConfig()
 
 
-# --------------------------------------------------------------------- argument types
+# ----------------------------------------------------------------------- argument types
 
 
 def _int_at_least(minimum: int) -> Callable[[str], int]:
@@ -110,7 +99,7 @@ _fraction = _float_in(0.0, 1.0, inclusive=False)
 _probability = _float_in(0.0, 1.0, inclusive=True)
 
 
-# --------------------------------------------------------------------------- parsers
+# ----------------------------------------------------------------------- option groups
 
 
 def _add_data_options(parser: argparse.ArgumentParser) -> None:
@@ -132,12 +121,14 @@ def _add_data_options(parser: argparse.ArgumentParser) -> None:
         "--val-size",
         type=_fraction,
         default=_SPLIT.val_size,
+        metavar="F",
         help="validation fraction (default: %(default)s)",
     )
     group.add_argument(
         "--test-size",
         type=_fraction,
         default=_SPLIT.test_size,
+        metavar="F",
         help="test fraction (default: %(default)s)",
     )
 
@@ -225,11 +216,14 @@ def _add_transcription_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
+# ---------------------------------------------------------------------------- commands
+
+
 def _add_train_parser(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
     common: argparse.ArgumentParser,
 ) -> None:
-    train = commands.add_parser(
+    train = subparsers.add_parser(
         "train",
         help="train a classifier",
         description="Train a classifier on the news dataset and save it with its metrics.",
@@ -285,7 +279,7 @@ def _add_train_parser(
         metavar="N",
         help="longest word n-gram (default: %(default)s)",
     )
-    baseline.set_defaults(handler=_cmd_train_baseline)
+    baseline.set_defaults(handler=commands.train_baseline, usage_error=baseline.error)
 
     transformer = backends.add_parser(
         "transformer",
@@ -318,6 +312,7 @@ def _add_train_parser(
         "--epochs",
         type=_positive_float,
         default=_TRANSFORMER.epochs,
+        metavar="N",
         help="maximum epochs (default: %(default)g)",
     )
     fine_tuning.add_argument(
@@ -377,14 +372,14 @@ def _add_train_parser(
     fine_tuning.add_argument(
         "--cpu", action="store_true", help="train on the CPU even if a GPU exists"
     )
-    transformer.set_defaults(handler=_cmd_train_transformer)
+    transformer.set_defaults(handler=commands.train_transformer, usage_error=transformer.error)
 
 
 def _add_evaluate_parser(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
     common: argparse.ArgumentParser,
 ) -> None:
-    evaluate = commands.add_parser(
+    evaluate = subparsers.add_parser(
         "evaluate",
         parents=[common],
         help="evaluate a trained model on a dataset split",
@@ -423,14 +418,14 @@ def _add_evaluate_parser(
     evaluate.add_argument(
         "--output", type=Path, metavar="FILE", help="also write the metrics as JSON to FILE"
     )
-    evaluate.set_defaults(handler=_cmd_evaluate, usage_error=evaluate.error)
+    evaluate.set_defaults(handler=commands.evaluate, usage_error=evaluate.error)
 
 
 def _add_predict_parser(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
     common: argparse.ArgumentParser,
 ) -> None:
-    predict = commands.add_parser(
+    predict = subparsers.add_parser(
         "predict",
         parents=[common],
         help="classify a transcript file or a text",
@@ -444,14 +439,14 @@ def _add_predict_parser(
     _add_classification_options(predict)
     _add_device_option(predict, help_text=_TRANSFORMER_DEVICE_HELP)
     predict.add_argument("--json", action="store_true", help="print the result as JSON")
-    predict.set_defaults(handler=_cmd_predict, usage_error=predict.error)
+    predict.set_defaults(handler=commands.predict, usage_error=predict.error)
 
 
 def _add_transcribe_parser(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
     common: argparse.ArgumentParser,
 ) -> None:
-    transcribe = commands.add_parser(
+    transcribe = subparsers.add_parser(
         "transcribe",
         parents=[common],
         help="transcribe a video (or local audio file) to .txt/.srt/.json",
@@ -465,14 +460,14 @@ def _add_transcribe_parser(
     transcribe.add_argument("source", metavar="URL_OR_FILE", help="video URL or media file")
     _add_transcription_options(transcribe)
     _add_device_option(transcribe, help_text="device for Whisper: auto, cpu or cuda")
-    transcribe.set_defaults(handler=_cmd_transcribe, usage_error=transcribe.error)
+    transcribe.set_defaults(handler=commands.transcribe, usage_error=transcribe.error)
 
 
 def _add_run_parser(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
     common: argparse.ArgumentParser,
 ) -> None:
-    run = commands.add_parser(
+    run = subparsers.add_parser(
         "run",
         parents=[common],
         help="transcribe a video and classify it (end to end)",
@@ -487,11 +482,11 @@ def _add_run_parser(
     _add_classification_options(run)
     _add_device_option(run, help_text="device for Whisper and the transformer: auto, cpu, cuda")
     run.add_argument("--json", action="store_true", help="print the result as JSON")
-    run.set_defaults(handler=_cmd_run, usage_error=run.error)
+    run.set_defaults(handler=commands.run, usage_error=run.error)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the argument parser (exposed for documentation and tests)."""
+    """Build the argument parser of the ``ytfakenews`` command."""
     common = argparse.ArgumentParser(add_help=False)
     verbosity = common.add_mutually_exclusive_group()
     verbosity.add_argument("-v", "--verbose", action="store_true", help="show debug messages")
@@ -506,355 +501,12 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    commands = parser.add_subparsers(
+    subparsers = parser.add_subparsers(
         title="commands", dest="command", metavar="COMMAND", required=True
     )
-    _add_transcribe_parser(commands, common)
-    _add_train_parser(commands, common)
-    _add_evaluate_parser(commands, common)
-    _add_predict_parser(commands, common)
-    _add_run_parser(commands, common)
+    _add_transcribe_parser(subparsers, common)
+    _add_train_parser(subparsers, common)
+    _add_evaluate_parser(subparsers, common)
+    _add_predict_parser(subparsers, common)
+    _add_run_parser(subparsers, common)
     return parser
-
-
-# -------------------------------------------------------------------------- commands
-
-
-def _split_config(args: argparse.Namespace) -> SplitConfig:
-    return SplitConfig(val_size=args.val_size, test_size=args.test_size, seed=args.seed)
-
-
-def _baseline_config(args: argparse.Namespace) -> BaselineConfig:
-    return BaselineConfig(
-        ngram_max=args.ngram_max, min_df=args.min_df, max_df=args.max_df, c=args.c, seed=args.seed
-    )
-
-
-def _transformer_config(args: argparse.Namespace) -> TransformerConfig:
-    return TransformerConfig(
-        model_name=args.model_name,
-        max_length=args.max_length,
-        head_tokens=args.head_tokens,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        grad_accum_steps=args.grad_accum,
-        learning_rate=args.lr,
-        patience=args.patience,
-        seed=args.seed,
-        fp16=args.fp16,
-        max_train_samples=args.max_train_samples,
-        cpu=args.cpu,
-    )
-
-
-def _cmd_train_baseline(args: argparse.Namespace) -> int:
-    from ytfakenews.models.baseline import train_baseline
-
-    metrics = train_baseline(
-        args.data, args.output_dir, config=_baseline_config(args), split=_split_config(args)
-    )
-    print(
-        f"Saved baseline model to {args.output_dir} "
-        f"({metrics['n_features']:,} features, fitted in {metrics['fit_seconds']:.1f} s)\n"
-    )
-    print(_format_metrics_table([("validation", metrics["validation"]), ("test", metrics["test"])]))
-    print()
-    print(_format_confusion_matrix(metrics["test"], title="Test confusion matrix"))
-    return 0
-
-
-def _cmd_train_transformer(args: argparse.Namespace) -> int:
-    from ytfakenews.models.transformer import train_transformer
-
-    metrics = train_transformer(
-        args.data, args.output_dir, config=_transformer_config(args), split=_split_config(args)
-    )
-    print(
-        f"Saved transformer model to {args.output_dir} (fine-tuned {args.model_name} for "
-        f"{metrics['epochs_run']:g} epochs in {metrics['train_seconds']:.0f} s)\n"
-    )
-    print(_format_metrics_table([("validation", metrics["validation"]), ("test", metrics["test"])]))
-    print()
-    print(_format_confusion_matrix(metrics["test"], title="Test confusion matrix"))
-    return 0
-
-
-def _cmd_evaluate(args: argparse.Namespace) -> int:
-    from ytfakenews.artifacts import read_manifest
-    from ytfakenews.data import prepare_splits
-    from ytfakenews.evaluation import evaluate_classifier
-    from ytfakenews.models import load_classifier
-
-    _check_chunking(args)
-    # The model first: a broken model directory or a missing extra fails before the
-    # dataset is read.
-    classifier = load_classifier(args.model, device=args.device)
-    manifest = read_manifest(args.model)
-    data_path = args.data or Path(manifest.data.get("path", DEFAULT_DATA_PATH))
-    split = SplitConfig(**manifest.data.get("split", {}))
-    splits, provenance = prepare_splits(data_path, split)
-    if manifest.data.get("sha256") not in (None, provenance["sha256"]):
-        logger.warning("%s differs from the dataset this model was trained on", data_path)
-    frame = splits.get(args.split)
-    metrics = evaluate_classifier(
-        classifier,
-        frame["text"].tolist(),
-        frame["label"].to_numpy(),
-        chunked=args.chunked,
-        chunk_words=args.chunk_words,
-        overlap=args.overlap,
-        threshold=args.threshold,
-        max_words=args.max_words,
-    )
-    metrics = {"model": _model_info(args.model, classifier.backend), "split": args.split, **metrics}
-    if args.output:
-        from ytfakenews.artifacts import write_json
-
-        write_json(args.output, metrics)
-    if args.json:
-        print(json.dumps(metrics, indent=2))
-        return 0
-    mode = metrics["input"]["mode"]
-    if mode == "chunked":
-        mode += f", {args.chunk_words}-word chunks, overlap {args.overlap}"
-    if args.max_words:
-        mode += f", first {args.max_words} words"
-    print(f"Model {args.model} ({classifier.backend}) on the {args.split} split ({mode})\n")
-    print(_format_metrics_table([(args.split, metrics)]))
-    print()
-    print(_format_confusion_matrix(metrics, title="Confusion matrix"))
-    return 0
-
-
-def _check_chunking(args: argparse.Namespace) -> None:
-    if args.overlap >= args.chunk_words:
-        args.usage_error(
-            f"--overlap ({args.overlap}) must be smaller than --chunk-words ({args.chunk_words})"
-        )
-
-
-def _read_input_text(args: argparse.Namespace) -> str:
-    from ytfakenews.text import read_transcript
-
-    if (args.file is None) == (args.text is None):
-        args.usage_error("give exactly one of FILE or --text")
-    if args.text is not None:
-        return str(args.text)
-    if str(args.file) == "-":
-        return sys.stdin.read()
-    if not args.file.is_file():
-        raise YTFakeNewsError(f"file not found: {args.file}")
-    try:
-        return read_transcript(args.file)
-    except UnicodeDecodeError as exc:
-        raise YTFakeNewsError(f"{args.file} is not UTF-8 text: {exc}") from exc
-
-
-def _cmd_predict(args: argparse.Namespace) -> int:
-    from ytfakenews.models import load_classifier
-
-    _check_chunking(args)
-    text = _read_input_text(args)
-    classifier = load_classifier(args.model, device=args.device)
-    prediction = _classify(text, classifier, args)
-    if args.json:
-        payload = {
-            "model": _model_info(args.model, classifier.backend),
-            "prediction": prediction.to_dict(),
-        }
-        print(json.dumps(payload, indent=2))
-    else:
-        print(_format_prediction(prediction, args.model, classifier.backend))
-    return 0
-
-
-def _check_transcription_args(args: argparse.Namespace) -> None:
-    if args.captions and args.translate:
-        args.usage_error("--translate applies to Whisper; it cannot be combined with --captions")
-
-
-def _transcribe(args: argparse.Namespace) -> tuple[Transcript, TranscriptFiles]:
-    from ytfakenews.asr import transcribe_source
-
-    return transcribe_source(
-        args.source,
-        output_dir=args.output_dir,
-        captions=args.captions,
-        language=args.language,
-        translate=args.translate,
-        model_size=args.whisper_model,
-        device=args.device,
-        compute_type=args.compute_type,
-        keep_audio=args.keep_audio,
-    )
-
-
-def _cmd_transcribe(args: argparse.Namespace) -> int:
-    _check_transcription_args(args)
-    transcript, files = _transcribe(args)
-    print(_describe_transcript(transcript))
-    for path in (files.txt, files.srt, files.json):
-        print(f"  {path.as_posix()}")
-    return 0
-
-
-def _cmd_run(args: argparse.Namespace) -> int:
-    from ytfakenews.models import load_classifier
-
-    _check_chunking(args)
-    _check_transcription_args(args)
-    classifier = load_classifier(args.model, device=args.device)
-    transcript, files = _transcribe(args)
-    if not transcript.text.strip():
-        raise YTFakeNewsError(
-            f"the transcript of {args.source} is empty (no speech found); "
-            f"see {files.json.as_posix()}"
-        )
-    prediction = _classify(transcript.text, classifier, args)
-    if args.json:
-        payload = {
-            "source": args.source,
-            "video": asdict(transcript.video) if transcript.video else None,
-            "transcript": {
-                "source": transcript.source,
-                "language": transcript.language,
-                "details": transcript.details,
-                "n_segments": len(transcript.segments),
-                "files": {kind: path.as_posix() for kind, path in asdict(files).items()},
-            },
-            "model": _model_info(args.model, classifier.backend),
-            "prediction": prediction.to_dict(),
-        }
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
-        return 0
-    if transcript.video:
-        print(f"Video:      {transcript.video.title or transcript.video.id}")
-        if transcript.video.url:
-            print(f"            {transcript.video.url}")
-    print(f"{_describe_transcript(transcript)} -> {files.txt.as_posix()}\n")
-    print(_format_prediction(prediction, args.model, classifier.backend))
-    return 0
-
-
-def _classify(text: str, classifier: Classifier, args: argparse.Namespace) -> Prediction:
-    from ytfakenews.predict import classify_text
-
-    try:
-        return classify_text(
-            text,
-            classifier,
-            chunk_words=args.chunk_words,
-            overlap=args.overlap,
-            threshold=args.threshold,
-        )
-    except ValueError as exc:
-        raise YTFakeNewsError(str(exc)) from exc
-
-
-# ------------------------------------------------------------------------ formatting
-
-
-def _model_info(model_dir: Path, backend: str) -> dict[str, str]:
-    return {"path": model_dir.as_posix(), "backend": backend}
-
-
-def _describe_transcript(transcript: Transcript) -> str:
-    details = transcript.details
-    if transcript.source == "whisper":
-        origin = f"faster-whisper {details.get('model')}"
-        if details.get("task") == "translate":
-            origin += f", translated from {details.get('spoken_language')}"
-    else:
-        origin = f"{details.get('kind')} captions, track {details.get('track')}"
-        if details.get("machine_translated"):
-            origin += ", machine-translated by YouTube"
-    words = len(transcript.text.split())
-    return (
-        f"Transcript: {len(transcript.segments)} segments, {words:,} words, "
-        f"language {transcript.language or 'unknown'} ({origin})"
-    )
-
-
-def _format_metrics_table(rows: Sequence[tuple[str, dict[str, Any]]]) -> str:
-    lines = [
-        f"{'split':<11}{'n':>6}{'accuracy':>10}{'precision':>11}"
-        f"{'recall':>8}{'F1':>8}{'ROC-AUC':>9}"
-    ]
-    for name, m in rows:
-        auc = "n/a" if m["roc_auc"] is None else f"{m['roc_auc']:.4f}"
-        lines.append(
-            f"{name:<11}{m['n']:>6}{m['accuracy']:>10.4f}{m['precision']:>11.4f}"
-            f"{m['recall']:>8.4f}{m['f1']:>8.4f}{auc:>9}"
-        )
-    return "\n".join(lines)
-
-
-def _format_confusion_matrix(metrics: dict[str, Any], *, title: str) -> str:
-    (tn, fp), (fn, tp) = metrics["confusion_matrix"]["values"]
-    return "\n".join(
-        [
-            f"{title} (rows: true label, columns: predicted)",
-            f"{'':>10}{'REAL':>7}{'FAKE':>7}",
-            f"{'REAL':>10}{tn:>7}{fp:>7}",
-            f"{'FAKE':>10}{fn:>7}{tp:>7}",
-        ]
-    )
-
-
-def _format_prediction(prediction: Prediction, model_dir: Path, backend: str) -> str:
-    lines = [
-        f"{prediction.label}  P(fake) = {prediction.p_fake:.3f}  "
-        f"(threshold {prediction.threshold:.2f}, mean over {prediction.n_chunks} "
-        f"chunk{'s' if prediction.n_chunks != 1 else ''})",
-        f"model: {model_dir.as_posix()} ({backend}); input: {prediction.n_words:,} words",
-    ]
-    if prediction.n_chunks > 1:
-        lines += ["", f"{'chunk':>5}  {'words':<13}{'P(fake)':>7}  preview"]
-        lines += [
-            f"{chunk.index + 1:>5}  {f'{chunk.start_word}-{chunk.end_word}':<13}"
-            f"{chunk.p_fake:>7.3f}  {chunk.preview}"
-            for chunk in prediction.chunks
-        ]
-    return "\n".join(lines)
-
-
-# ------------------------------------------------------------------------------ main
-
-
-class _LogFormatter(logging.Formatter):
-    """Plain messages for progress; ``warning: ...``/``error: ...`` prefixes otherwise."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        message = super().format(record)
-        if record.levelno >= logging.WARNING:
-            return f"{record.levelname.lower()}: {message}"
-        return message
-
-
-_log_handler: logging.Handler | None = None
-
-
-def _configure_logging(*, verbose: bool, quiet: bool) -> None:
-    # A fresh handler per invocation binds to the current sys.stderr.
-    global _log_handler
-    if _log_handler is not None:
-        logger.removeHandler(_log_handler)
-    _log_handler = logging.StreamHandler(sys.stderr)
-    _log_handler.setFormatter(_LogFormatter("%(message)s"))
-    logger.addHandler(_log_handler)
-    logger.setLevel(logging.DEBUG if verbose else logging.WARNING if quiet else logging.INFO)
-    logger.propagate = False
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point of the ``ytfakenews`` console script; returns the exit code."""
-    args = build_parser().parse_args(argv)
-    _configure_logging(verbose=args.verbose, quiet=args.quiet)
-    try:
-        return int(args.handler(args))
-    except YTFakeNewsError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    except KeyboardInterrupt:
-        print("interrupted", file=sys.stderr)
-        return 130

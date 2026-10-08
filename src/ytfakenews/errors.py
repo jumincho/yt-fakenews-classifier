@@ -15,6 +15,10 @@ class DatasetError(YTFakeNewsError):
     """The training dataset is missing or malformed."""
 
 
+class EmptyTextError(YTFakeNewsError, ValueError):
+    """A text has no words left to classify after cleanup (e.g. it was only ``[Music]``)."""
+
+
 class ModelLoadError(YTFakeNewsError):
     """A model directory is missing, incomplete or of an unknown type."""
 

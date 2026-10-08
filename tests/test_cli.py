@@ -6,12 +6,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from tests.helpers import FIXTURES, VIDEO, VIDEO_URL, FakeYouTube
-from ytfakenews import __version__, cli
+from tests.helpers import FIXTURES, VIDEO, VIDEO_URL, FakeYouTube, write_zipped_csv
+from ytfakenews import __version__
 from ytfakenews.artifacts import write_manifest
-from ytfakenews.cli import build_parser, main
+from ytfakenews.cli import build_parser, commands, main
 from ytfakenews.config import BaselineConfig, SplitConfig, TransformerConfig
 
 
@@ -26,6 +27,13 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
         main(["--version"])
     assert exit_info.value.code == 0
     assert capsys.readouterr().out.strip() == f"ytfakenews {__version__}"
+
+
+def test_python_m_ytfakenews_runs_the_cli() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "ytfakenews", "--version"], capture_output=True, text=True
+    )
+    assert (result.returncode, result.stdout.strip()) == (0, f"ytfakenews {__version__}")
 
 
 @pytest.mark.parametrize(
@@ -68,10 +76,10 @@ def test_startup_does_not_import_heavy_dependencies() -> None:
 def test_training_options_default_to_the_config_dataclasses() -> None:
     parser = build_parser()
     args = parser.parse_args(["train", "baseline"])
-    assert cli._split_config(args) == SplitConfig()
-    assert cli._baseline_config(args) == BaselineConfig()
+    assert commands.split_config(args) == SplitConfig()
+    assert commands.baseline_config(args) == BaselineConfig()
     args = parser.parse_args(["train", "transformer"])
-    assert cli._transformer_config(args) == TransformerConfig()
+    assert commands.transformer_config(args) == TransformerConfig()
 
 
 def test_train_baseline(capsys: pytest.CaptureFixture[str], news_zip: Path, tmp_path: Path) -> None:
@@ -147,6 +155,17 @@ def test_predict_long_text_shows_chunks(
     assert "preview" in out
 
 
+def test_json_output_keeps_non_ascii_text(
+    capsys: pytest.CaptureFixture[str], baseline_dir: Path
+) -> None:
+    text = "officials said the budget passed, 기자회견에서 밝혔다"
+    args = ("--model", str(baseline_dir), "--text", text, "--json")
+    code, out, _ = run_cli(capsys, "predict", *args)
+    assert code == 0
+    assert "기자회견에서 밝혔다" in out
+    assert json.loads(out)["prediction"]["chunks"][0]["preview"] == text
+
+
 def test_predict_reads_stdin(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, baseline_dir: Path
 ) -> None:
@@ -166,6 +185,8 @@ def test_predict_reads_stdin(
         ["predict", "--text", "x", "--chunk-words", "50"],
         ["evaluate", "--overlap", "300"],
         ["train", "baseline", "--val-size", "1.5"],
+        ["train", "baseline", "--val-size", "0.6", "--test-size", "0.5"],
+        ["train", "transformer", "--val-size", "0.5", "--test-size", "0.5"],
         ["transcribe", VIDEO_URL, "--captions", "--translate"],
         ["run"],
     ],
@@ -201,6 +222,20 @@ def test_runtime_errors_are_reported_without_traceback(
     code, _, err = run_cli(capsys, "train", "baseline", "--data", str(tmp_path / "none.zip"))
     assert code == 1
     assert "dataset not found" in err
+
+
+def test_evaluate_reports_articles_without_words(
+    capsys: pytest.CaptureFixture[str], baseline_dir: Path, tmp_path: Path
+) -> None:
+    # Every text is a caption annotation, which cleanup removes before chunking.
+    labels = ["REAL", "FAKE"] * 10
+    frame = pd.DataFrame({"text": [f"[Music {i}]" for i in range(20)], "label": labels})
+    data = write_zipped_csv(frame, tmp_path)
+    args = ("--model", str(baseline_dir), "--data", str(data), "--chunked")
+    code, _, err = run_cli(capsys, "evaluate", *args)
+    assert code == 1
+    assert "warning: " in err  # not the dataset the model was trained on
+    assert err.strip().endswith("is empty after cleaning; nothing to classify")
 
 
 # -------------------------------------------------------- transcribe and run (mocked)

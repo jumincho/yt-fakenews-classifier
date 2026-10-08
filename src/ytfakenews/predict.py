@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from ytfakenews.errors import EmptyTextError
 from ytfakenews.text import chunk_spans, clean_text
 
 if TYPE_CHECKING:
@@ -92,7 +93,8 @@ def classify_texts(
 ) -> list[Prediction]:
     """Classify several texts; all chunks are scored in a single batch.
 
-    Raises :class:`ValueError` if a text has no words left after cleaning.
+    Raises :class:`~ytfakenews.errors.EmptyTextError` (a :class:`ValueError`) if a text
+    has no words left after cleaning.
     """
     if not 0.0 <= threshold <= 1.0:
         raise ValueError(f"threshold must be between 0 and 1, got {threshold}")
@@ -102,7 +104,7 @@ def classify_texts(
         words = (clean_text(text) if clean else text).split()
         if not words:
             which = "the text" if len(texts) == 1 else f"text #{position}"
-            raise ValueError(f"{which} is empty after cleaning; nothing to classify")
+            raise EmptyTextError(f"{which} is empty after cleaning; nothing to classify")
         spans = chunk_spans(len(words), max_words=chunk_words, overlap=overlap)
         documents.append((words, spans))
         chunks.extend(" ".join(words[start:end]) for start, end in spans)
