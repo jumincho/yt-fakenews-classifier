@@ -21,13 +21,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ytfakenews.artifacts import read_manifest
+from ytfakenews.config import DEFAULT_BASELINE_DIR
 from ytfakenews.errors import ModelLoadError
 from ytfakenews.text import chunk_spans, clean_text
 
 __all__ = [
     "AGGREGATION",
     "DEFAULT_CHUNK_WORDS",
-    "DEFAULT_MODEL_DIR",
     "DEFAULT_OVERLAP",
     "DEFAULT_THRESHOLD",
     "ChunkScore",
@@ -38,7 +38,6 @@ __all__ = [
     "load_classifier",
 ]
 
-DEFAULT_MODEL_DIR = Path("models") / "baseline"
 DEFAULT_CHUNK_WORDS = 300
 DEFAULT_OVERLAP = 50
 DEFAULT_THRESHOLD = 0.5
@@ -181,7 +180,7 @@ def classify_text(
 
 
 def load_classifier(
-    model_dir: str | Path = DEFAULT_MODEL_DIR, *, device: str = "auto"
+    model_dir: str | Path = DEFAULT_BASELINE_DIR, *, device: str = "auto"
 ) -> Classifier:
     """Load a trained model directory of any backend.
 

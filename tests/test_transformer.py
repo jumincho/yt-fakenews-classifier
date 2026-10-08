@@ -85,7 +85,8 @@ def tiny_base_model(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def trained_transformer(
     tmp_path_factory: pytest.TempPathFactory, tiny_base_model: Path
 ) -> tuple[Path, dict[str, Any], Path]:
-    from ytfakenews.transformer import TransformerConfig, train_transformer
+    from ytfakenews.config import TransformerConfig
+    from ytfakenews.transformer import train_transformer
 
     root = tmp_path_factory.mktemp("transformer")
     data = write_zipped_csv(make_news_frame(), root)

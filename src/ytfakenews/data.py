@@ -16,15 +16,14 @@ from typing import Any
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
+from ytfakenews.config import DEFAULT_DATA_PATH, SplitConfig
 from ytfakenews.errors import DatasetError
 
 __all__ = [
-    "DEFAULT_DATA_PATH",
     "ID2LABEL",
     "LABEL2ID",
     "LABELS",
     "CleaningStats",
-    "SplitConfig",
     "Splits",
     "clean_dataset",
     "file_sha256",
@@ -36,7 +35,6 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DATA_PATH = Path("data") / "fake_or_real_news.zip"
 LABELS: tuple[str, str] = ("REAL", "FAKE")
 LABEL2ID: dict[str, int] = {"REAL": 0, "FAKE": 1}
 ID2LABEL: dict[int, str] = {index: name for name, index in LABEL2ID.items()}
@@ -54,21 +52,6 @@ class CleaningStats:
     """Of the dropped duplicates, rows whose title, text and label all match an earlier row."""
     rows_kept: int
     label_counts: dict[str, int] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class SplitConfig:
-    """Fractions and seed of the stratified train/validation/test split."""
-
-    val_size: float = 0.1
-    test_size: float = 0.1
-    seed: int = 42
-
-    def __post_init__(self) -> None:
-        if not (0 < self.val_size < 1 and 0 < self.test_size < 1):
-            raise ValueError("val_size and test_size must be between 0 and 1")
-        if self.val_size + self.test_size >= 1:
-            raise ValueError("val_size + test_size must be smaller than 1")
 
 
 @dataclass(frozen=True)

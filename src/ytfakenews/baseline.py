@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -21,39 +21,21 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
 from ytfakenews.artifacts import METRICS_FILE, write_json, write_manifest
-from ytfakenews.data import DEFAULT_DATA_PATH, SplitConfig, prepare_splits
+from ytfakenews.config import DEFAULT_BASELINE_DIR, DEFAULT_DATA_PATH, BaselineConfig, SplitConfig
+from ytfakenews.data import prepare_splits
 from ytfakenews.errors import ModelLoadError
 from ytfakenews.evaluation import evaluate_classifier
 
 __all__ = [
-    "DEFAULT_OUTPUT_DIR",
     "MODEL_FILE",
     "BaselineClassifier",
-    "BaselineConfig",
     "build_pipeline",
     "train_baseline",
 ]
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_OUTPUT_DIR = Path("models") / "baseline"
 MODEL_FILE = "model.joblib"
-
-
-@dataclass(frozen=True)
-class BaselineConfig:
-    """Hyper-parameters of the baseline.
-
-    ``c`` (inverse regularisation strength) was chosen on the validation split; the
-    validation F1 is flat for values between roughly 16 and 256.
-    """
-
-    ngram_max: int = 2
-    min_df: int = 3
-    max_df: float = 0.9
-    c: float = 32.0
-    max_iter: int = 1000
-    seed: int = 42
 
 
 def build_pipeline(config: BaselineConfig | None = None) -> Pipeline:
@@ -148,7 +130,7 @@ class BaselineClassifier:
 
 def train_baseline(
     data_path: str | Path = DEFAULT_DATA_PATH,
-    output_dir: str | Path = DEFAULT_OUTPUT_DIR,
+    output_dir: str | Path = DEFAULT_BASELINE_DIR,
     *,
     config: BaselineConfig | None = None,
     split: SplitConfig | None = None,

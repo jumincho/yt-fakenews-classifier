@@ -7,9 +7,9 @@ import pandas as pd
 import pytest
 
 from tests.helpers import FIXTURES
+from ytfakenews.config import SplitConfig
 from ytfakenews.data import (
     LABEL2ID,
-    SplitConfig,
     clean_dataset,
     file_sha256,
     load_dataset,

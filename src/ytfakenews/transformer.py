@@ -22,7 +22,7 @@ import logging
 import shutil
 import time
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -32,48 +32,25 @@ from numpy.typing import NDArray
 
 from ytfakenews._optional import require
 from ytfakenews.artifacts import METRICS_FILE, Manifest, read_manifest, write_json, write_manifest
-from ytfakenews.data import DEFAULT_DATA_PATH, ID2LABEL, LABEL2ID, SplitConfig, prepare_splits
+from ytfakenews.config import (
+    DEFAULT_DATA_PATH,
+    DEFAULT_TRANSFORMER_DIR,
+    SplitConfig,
+    TransformerConfig,
+)
+from ytfakenews.data import ID2LABEL, LABEL2ID, prepare_splits
 from ytfakenews.errors import ModelLoadError, YTFakeNewsError
 from ytfakenews.evaluation import compute_metrics, evaluate_classifier
 
 __all__ = [
-    "DEFAULT_MODEL_NAME",
-    "DEFAULT_OUTPUT_DIR",
     "HeadTailEncoder",
     "TransformerClassifier",
-    "TransformerConfig",
     "special_affixes",
     "train_transformer",
     "truncate_head_tail",
 ]
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MODEL_NAME = "xlm-roberta-base"
-DEFAULT_OUTPUT_DIR = Path("models") / "transformer"
-
-
-@dataclass(frozen=True)
-class TransformerConfig:
-    """Fine-tuning settings. The defaults target a single 16 GB GPU (e.g. a Colab T4)."""
-
-    model_name: str = DEFAULT_MODEL_NAME
-    max_length: int = 512
-    head_tokens: int = 128
-    epochs: float = 4.0
-    batch_size: int = 8
-    grad_accum_steps: int = 2
-    eval_batch_size: int = 32
-    learning_rate: float = 2e-5
-    weight_decay: float = 0.01
-    warmup_ratio: float = 0.1
-    patience: int = 2
-    seed: int = 42
-    fp16: bool | None = None
-    """Mixed precision; ``None`` enables it whenever a CUDA GPU is used."""
-    max_train_samples: int | None = None
-    """Train on a random subset (for quick experiments); validation/test stay complete."""
-    cpu: bool = False
 
 
 # ----------------------------------------------------------------------------- encoding
@@ -273,7 +250,7 @@ def _features(encoder: HeadTailEncoder, frame: pd.DataFrame) -> list[dict[str, A
 
 def train_transformer(
     data_path: str | Path = DEFAULT_DATA_PATH,
-    output_dir: str | Path = DEFAULT_OUTPUT_DIR,
+    output_dir: str | Path = DEFAULT_TRANSFORMER_DIR,
     *,
     config: TransformerConfig | None = None,
     split: SplitConfig | None = None,

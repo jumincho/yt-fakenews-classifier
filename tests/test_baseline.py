@@ -9,7 +9,8 @@ import pandas as pd
 import pytest
 
 from ytfakenews.artifacts import read_manifest
-from ytfakenews.baseline import BaselineClassifier, BaselineConfig, train_baseline
+from ytfakenews.baseline import BaselineClassifier, train_baseline
+from ytfakenews.config import BaselineConfig
 from ytfakenews.data import clean_dataset, split_dataset
 from ytfakenews.errors import ModelLoadError
 from ytfakenews.predict import Classifier

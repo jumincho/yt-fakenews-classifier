@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
 from tests.helpers import FIXTURES, VIDEO, VIDEO_URL, FakeYouTube
-from ytfakenews import __version__
+from ytfakenews import __version__, cli
 from ytfakenews.artifacts import write_manifest
-from ytfakenews.cli import main
+from ytfakenews.cli import build_parser, main
+from ytfakenews.config import BaselineConfig, SplitConfig, TransformerConfig
 
 
 def run_cli(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, str, str]:
@@ -50,6 +52,26 @@ def test_missing_command_is_a_usage_error(capsys: pytest.CaptureFixture[str]) ->
         main([])
     assert exit_info.value.code == 2
     assert "required" in capsys.readouterr().err
+
+
+def test_startup_does_not_import_heavy_dependencies() -> None:
+    # `ytfakenews --help`, usage errors and `transcribe` should not wait for pandas,
+    # scikit-learn or an optional extra to import.
+    heavy = ["pandas", "sklearn", "torch", "transformers", "yt_dlp", "faster_whisper"]
+    code = f"import sys, ytfakenews.cli; print([m for m in {heavy!r} if m in sys.modules])"
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "[]"
+
+
+def test_training_options_default_to_the_config_dataclasses() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["train", "baseline"])
+    assert cli._split_config(args) == SplitConfig()
+    assert cli._baseline_config(args) == BaselineConfig()
+    args = parser.parse_args(["train", "transformer"])
+    assert cli._transformer_config(args) == TransformerConfig()
 
 
 def test_train_baseline(capsys: pytest.CaptureFixture[str], news_zip: Path, tmp_path: Path) -> None:
