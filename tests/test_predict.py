@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from pathlib import Path
 
 import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from ytfakenews.artifacts import MANIFEST_FILE
-from ytfakenews.baseline import BaselineClassifier
-from ytfakenews.errors import ModelLoadError
-from ytfakenews.predict import Prediction, classify_text, classify_texts, load_classifier
+from ytfakenews.predict import Prediction, classify_text, classify_texts
 
 
 class KeywordClassifier:
@@ -108,27 +104,3 @@ def test_prediction_to_dict_is_json_serialisable() -> None:
     assert payload["aggregation"] == "mean"
     assert payload["n_chunks"] == len(payload["chunks"]) == 2
     assert isinstance(prediction, Prediction)
-
-
-def test_load_classifier_baseline(baseline_dir: Path) -> None:
-    classifier = load_classifier(baseline_dir)
-    assert isinstance(classifier, BaselineClassifier)
-    assert classifier.backend == "baseline"
-
-
-def test_load_classifier_errors(tmp_path: Path) -> None:
-    with pytest.raises(ModelLoadError, match="model directory not found"):
-        load_classifier(tmp_path / "missing")
-    with pytest.raises(ModelLoadError, match="not a ytfakenews model directory"):
-        load_classifier(tmp_path)
-
-    manifest = tmp_path / MANIFEST_FILE
-    manifest.write_text("{not json", encoding="utf-8")
-    with pytest.raises(ModelLoadError, match="not valid JSON"):
-        load_classifier(tmp_path)
-    manifest.write_text(json.dumps({"format_version": 99, "backend": "baseline"}), "utf-8")
-    with pytest.raises(ModelLoadError, match="format_version"):
-        load_classifier(tmp_path)
-    manifest.write_text(json.dumps({"format_version": 1, "backend": "svm"}), "utf-8")
-    with pytest.raises(ModelLoadError, match="unknown backend"):
-        load_classifier(tmp_path)

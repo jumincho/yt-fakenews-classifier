@@ -1,4 +1,4 @@
-"""Fine-tune and run a transformer encoder (default: multilingual XLM-RoBERTa).
+"""The ``transformer`` backend: a fine-tuned encoder (default: multilingual XLM-RoBERTa).
 
 The classifier is trained on English articles only. A multilingual backbone is used
 because it maps many languages into a shared representation, so the fine-tuned model
@@ -11,8 +11,9 @@ than keeping only the head for long-document classification (Sun et al., 2019, "
 to Fine-Tune BERT for Text Classification?"). Training uses the Hugging Face
 ``Trainer`` with early stopping on validation F1.
 
-Requires the ``transformer`` extra; torch and transformers are imported lazily, so
-the rest of the package works without them.
+The settings are in :class:`ytfakenews.config.TransformerConfig`. Requires the
+``transformer`` extra; torch and transformers are imported lazily, so the rest of the
+package works without them.
 """
 
 from __future__ import annotations
@@ -24,14 +25,13 @@ import time
 from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import pandas as pd
 from numpy.typing import NDArray
 
 from ytfakenews._optional import require
-from ytfakenews.artifacts import METRICS_FILE, Manifest, read_manifest, write_json, write_manifest
+from ytfakenews.artifacts import Manifest, read_manifest, save_model_dir
 from ytfakenews.config import (
     DEFAULT_DATA_PATH,
     DEFAULT_TRANSFORMER_DIR,
@@ -40,7 +40,10 @@ from ytfakenews.config import (
 )
 from ytfakenews.data import ID2LABEL, LABEL2ID, prepare_splits
 from ytfakenews.errors import ModelLoadError, YTFakeNewsError
-from ytfakenews.evaluation import compute_metrics, evaluate_classifier
+from ytfakenews.evaluation import compute_metrics, evaluate_splits
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 __all__ = [
     "HeadTailEncoder",
@@ -120,7 +123,7 @@ def resolve_device(device: str = "auto") -> Any:
 
 
 class TransformerClassifier:
-    """A fine-tuned sequence-classification model behind the common interface."""
+    """A fine-tuned sequence-classification model; implements ``Classifier``."""
 
     backend = "transformer"
 
@@ -323,26 +326,30 @@ def train_transformer(
         head_tokens=config.head_tokens,
         batch_size=config.eval_batch_size,
     )
-    metrics: dict[str, Any] = {"backend": "transformer", "base_model": config.model_name}
-    for name, frame in (("validation", splits.val), ("test", splits.test)):
-        metrics[name] = evaluate_classifier(
-            classifier, frame["text"].tolist(), frame["label"].to_numpy()
-        )
-    metrics.update(
-        {
-            "train_seconds": round(train_seconds, 1),
-            "train_samples": len(train_frame),
-            "epochs_run": trainer.state.epoch,
-            "best_validation_f1": trainer.state.best_metric,
-            "log_history": trainer.state.log_history,
-            "data": provenance,
-        }
-    )
+    metrics: dict[str, Any] = {
+        "backend": TransformerClassifier.backend,
+        "base_model": config.model_name,
+        **evaluate_splits(classifier, splits),
+        "train_seconds": round(train_seconds, 1),
+        "train_samples": len(train_frame),
+        "epochs_run": trainer.state.epoch,
+        "best_validation_f1": trainer.state.best_metric,
+        "log_history": trainer.state.log_history,
+        "data": provenance,
+    }
 
-    trainer.save_model(str(output_dir))
-    tokenizer.save_pretrained(str(output_dir))
-    shutil.rmtree(checkpoints, ignore_errors=True)
-    write_json(output_dir / METRICS_FILE, metrics)
-    write_manifest(output_dir, backend="transformer", config=asdict(config), data=provenance)
+    def write_model(directory: Path) -> None:
+        trainer.save_model(str(directory))
+        tokenizer.save_pretrained(str(directory))
+        shutil.rmtree(checkpoints, ignore_errors=True)
+
+    save_model_dir(
+        output_dir,
+        write_model,
+        backend=TransformerClassifier.backend,
+        config=asdict(config),
+        data=provenance,
+        metrics=metrics,
+    )
     logger.debug("Saved transformer model to %s", output_dir)
     return metrics

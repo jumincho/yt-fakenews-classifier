@@ -1,7 +1,9 @@
-"""TF-IDF + logistic-regression baseline.
+"""The ``baseline`` backend: TF-IDF + logistic regression.
 
 Word uni- and bigrams with sublinear term frequency feed an L2-regularised logistic
-regression. It trains in seconds on a CPU and is the default model of the CLI.
+regression (hyper-parameters in :class:`ytfakenews.config.BaselineConfig`). It trains
+in seconds on a CPU and is the default model of the CLI. The fitted scikit-learn
+pipeline is saved as ``model.joblib``.
 """
 
 from __future__ import annotations
@@ -20,11 +22,11 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
-from ytfakenews.artifacts import METRICS_FILE, write_json, write_manifest
+from ytfakenews.artifacts import save_model_dir
 from ytfakenews.config import DEFAULT_BASELINE_DIR, DEFAULT_DATA_PATH, BaselineConfig, SplitConfig
 from ytfakenews.data import prepare_splits
 from ytfakenews.errors import ModelLoadError
-from ytfakenews.evaluation import evaluate_classifier
+from ytfakenews.evaluation import evaluate_splits
 
 __all__ = [
     "MODEL_FILE",
@@ -67,7 +69,7 @@ def build_pipeline(config: BaselineConfig | None = None) -> Pipeline:
 
 
 class BaselineClassifier:
-    """Fitted TF-IDF + logistic-regression pipeline behind the common interface."""
+    """A fitted TF-IDF + logistic-regression pipeline; implements ``Classifier``."""
 
     backend = "baseline"
 
@@ -150,23 +152,21 @@ def train_baseline(
     )
     fit_seconds = time.perf_counter() - started
 
-    metrics: dict[str, Any] = {"backend": "baseline"}
-    for name, frame in (("validation", splits.val), ("test", splits.test)):
-        metrics[name] = evaluate_classifier(
-            classifier, frame["text"].tolist(), frame["label"].to_numpy()
-        )
-    metrics.update(
-        {
-            "fit_seconds": round(fit_seconds, 2),
-            "n_features": classifier.n_features,
-            "top_features": classifier.top_features(),
-            "data": provenance,
-        }
+    metrics: dict[str, Any] = {
+        "backend": BaselineClassifier.backend,
+        **evaluate_splits(classifier, splits),
+        "fit_seconds": round(fit_seconds, 2),
+        "n_features": classifier.n_features,
+        "top_features": classifier.top_features(),
+        "data": provenance,
+    }
+    save_model_dir(
+        output_dir,
+        classifier.save,
+        backend=BaselineClassifier.backend,
+        config=asdict(config),
+        data=provenance,
+        metrics=metrics,
     )
-
-    output_dir = Path(output_dir)
-    classifier.save(output_dir)
-    write_json(output_dir / METRICS_FILE, metrics)
-    write_manifest(output_dir, backend="baseline", config=asdict(config), data=provenance)
     logger.debug("Saved baseline model to %s", output_dir)
     return metrics

@@ -1,4 +1,4 @@
-"""Backend-independent classification: cleanup, chunking, aggregation and model loading.
+"""Classify transcripts with any backend: cleanup, chunking and aggregation.
 
 A transcript can be much longer than what a model handles well (or was trained on), so
 :func:`classify_text` cleans it, splits it into overlapping word windows
@@ -14,16 +14,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
-from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from numpy.typing import NDArray
 
-from ytfakenews.artifacts import read_manifest
-from ytfakenews.config import DEFAULT_BASELINE_DIR
-from ytfakenews.errors import ModelLoadError
 from ytfakenews.text import chunk_spans, clean_text
+
+if TYPE_CHECKING:
+    from ytfakenews.models import Classifier
 
 __all__ = [
     "AGGREGATION",
@@ -31,11 +29,9 @@ __all__ = [
     "DEFAULT_OVERLAP",
     "DEFAULT_THRESHOLD",
     "ChunkScore",
-    "Classifier",
     "Prediction",
     "classify_text",
     "classify_texts",
-    "load_classifier",
 ]
 
 DEFAULT_CHUNK_WORDS = 300
@@ -43,17 +39,6 @@ DEFAULT_OVERLAP = 50
 DEFAULT_THRESHOLD = 0.5
 AGGREGATION = "mean"
 _PREVIEW_WORDS = 12
-
-
-@runtime_checkable
-class Classifier(Protocol):
-    """A trained model that returns, for every input text, the probability it is FAKE."""
-
-    backend: str
-
-    def predict_proba(self, texts: Sequence[str]) -> NDArray[np.float64]:
-        """Return ``P(FAKE)`` for each text, as a 1-D array of the same length."""
-        ...
 
 
 @dataclass(frozen=True)
@@ -177,24 +162,3 @@ def classify_text(
         clean=clean,
     )
     return prediction
-
-
-def load_classifier(
-    model_dir: str | Path = DEFAULT_BASELINE_DIR, *, device: str = "auto"
-) -> Classifier:
-    """Load a trained model directory of any backend.
-
-    ``device`` only applies to the transformer backend (``auto``, ``cpu``, ``cuda``, ...).
-    Model files are deserialised with pickle/joblib or PyTorch, so only load models you
-    trained yourself or otherwise trust.
-    """
-    manifest = read_manifest(model_dir)
-    if manifest.backend == "baseline":
-        from ytfakenews.baseline import BaselineClassifier  # imports scikit-learn
-
-        return BaselineClassifier.load(model_dir)
-    if manifest.backend == "transformer":
-        from ytfakenews.transformer import TransformerClassifier  # needs the extra
-
-        return TransformerClassifier.load(model_dir, device=device, manifest=manifest)
-    raise ModelLoadError(f"unsupported backend {manifest.backend!r} in {model_dir}")

@@ -11,14 +11,8 @@ Python API for classification is intentionally small::
 """
 
 from ytfakenews.errors import YTFakeNewsError
-from ytfakenews.predict import (
-    ChunkScore,
-    Classifier,
-    Prediction,
-    classify_text,
-    classify_texts,
-    load_classifier,
-)
+from ytfakenews.models import Classifier, load_classifier
+from ytfakenews.predict import ChunkScore, Prediction, classify_text, classify_texts
 
 __version__ = "0.1.0"
 

@@ -16,7 +16,7 @@ import pytest
 
 from tests.helpers import import_or_skip, make_news_frame, write_zipped_csv
 from ytfakenews.cli import main
-from ytfakenews.transformer import truncate_head_tail
+from ytfakenews.models.transformer import truncate_head_tail
 
 
 def test_truncate_head_tail() -> None:
@@ -86,7 +86,7 @@ def trained_transformer(
     tmp_path_factory: pytest.TempPathFactory, tiny_base_model: Path
 ) -> tuple[Path, dict[str, Any], Path]:
     from ytfakenews.config import TransformerConfig
-    from ytfakenews.transformer import train_transformer
+    from ytfakenews.models.transformer import train_transformer
 
     root = tmp_path_factory.mktemp("transformer")
     data = write_zipped_csv(make_news_frame(), root)
@@ -106,7 +106,7 @@ def trained_transformer(
 
 def test_head_tail_encoder(tiny_base_model: Path) -> None:
     transformers = import_or_skip("transformers")
-    from ytfakenews.transformer import HeadTailEncoder, special_affixes
+    from ytfakenews.models.transformer import HeadTailEncoder, special_affixes
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(str(tiny_base_model))
     cls_id, sep_id = tokenizer.cls_token_id, tokenizer.sep_token_id
@@ -150,8 +150,8 @@ def test_training_writes_a_loadable_model(
 def test_loaded_model_predicts_through_the_common_interface(
     trained_transformer: tuple[Path, dict[str, Any], Path],
 ) -> None:
-    from ytfakenews.predict import classify_text, load_classifier
-    from ytfakenews.transformer import TransformerClassifier
+    from ytfakenews import classify_text, load_classifier
+    from ytfakenews.models.transformer import TransformerClassifier
 
     classifier = load_classifier(trained_transformer[0], device="cpu")
     assert isinstance(classifier, TransformerClassifier)

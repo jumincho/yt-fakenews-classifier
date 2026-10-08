@@ -23,7 +23,7 @@ def news_zip(tmp_path: Path, news_frame: pd.DataFrame) -> Path:
 @pytest.fixture(scope="session")
 def baseline_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """A baseline model trained once per test session on the toy corpus."""
-    from ytfakenews.baseline import train_baseline
+    from ytfakenews.models.baseline import train_baseline
 
     root = tmp_path_factory.mktemp("baseline")
     data = write_zipped_csv(make_news_frame(), root)

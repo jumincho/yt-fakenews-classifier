@@ -7,13 +7,14 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
+import sklearn
 
 from ytfakenews.artifacts import read_manifest
-from ytfakenews.baseline import BaselineClassifier, train_baseline
 from ytfakenews.config import BaselineConfig
 from ytfakenews.data import clean_dataset, split_dataset
 from ytfakenews.errors import ModelLoadError
-from ytfakenews.predict import Classifier
+from ytfakenews.models import Classifier
+from ytfakenews.models.baseline import BaselineClassifier, train_baseline
 
 
 @pytest.fixture
@@ -79,3 +80,4 @@ def test_train_baseline_writes_model_metrics_and_manifest(news_zip: Path, tmp_pa
     assert manifest.backend == "baseline"
     assert manifest.config["c"] == 4.0
     assert manifest.data["split"]["seed"] == 42
+    assert manifest.environment["scikit-learn"] == sklearn.__version__

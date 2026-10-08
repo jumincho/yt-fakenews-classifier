@@ -25,9 +25,10 @@ from ytfakenews.predict import (
 )
 
 if TYPE_CHECKING:
-    from ytfakenews.predict import Classifier
+    from ytfakenews.data import Splits
+    from ytfakenews.models import Classifier
 
-__all__ = ["compute_metrics", "evaluate_classifier"]
+__all__ = ["compute_metrics", "evaluate_classifier", "evaluate_splits"]
 
 
 def compute_metrics(
@@ -103,3 +104,14 @@ def evaluate_classifier(
     metrics = compute_metrics(labels, p_fake, threshold=threshold)
     metrics["input"] = mode
     return metrics
+
+
+def evaluate_splits(classifier: Classifier, splits: Splits) -> dict[str, dict[str, Any]]:
+    """Document-level metrics on the validation and test splits.
+
+    Every backend reports these after training and stores them in ``metrics.json``.
+    """
+    return {
+        name: evaluate_classifier(classifier, frame["text"].tolist(), frame["label"].to_numpy())
+        for name, frame in (("validation", splits.val), ("test", splits.test))
+    }

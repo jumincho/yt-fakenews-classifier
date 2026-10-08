@@ -21,11 +21,11 @@ from ytfakenews.config import (
     TransformerConfig,
 )
 from ytfakenews.errors import YTFakeNewsError
+from ytfakenews.models import Classifier
 from ytfakenews.predict import (
     DEFAULT_CHUNK_WORDS,
     DEFAULT_OVERLAP,
     DEFAULT_THRESHOLD,
-    Classifier,
     Prediction,
 )
 from ytfakenews.transcribe import DEFAULT_OUTPUT_DIR, DEFAULT_WHISPER_MODEL
@@ -548,7 +548,7 @@ def _transformer_config(args: argparse.Namespace) -> TransformerConfig:
 
 
 def _cmd_train_baseline(args: argparse.Namespace) -> int:
-    from ytfakenews.baseline import train_baseline
+    from ytfakenews.models.baseline import train_baseline
 
     metrics = train_baseline(
         args.data, args.output_dir, config=_baseline_config(args), split=_split_config(args)
@@ -564,7 +564,7 @@ def _cmd_train_baseline(args: argparse.Namespace) -> int:
 
 
 def _cmd_train_transformer(args: argparse.Namespace) -> int:
-    from ytfakenews.transformer import train_transformer
+    from ytfakenews.models.transformer import train_transformer
 
     metrics = train_transformer(
         args.data, args.output_dir, config=_transformer_config(args), split=_split_config(args)
@@ -583,9 +583,12 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     from ytfakenews.artifacts import read_manifest
     from ytfakenews.data import prepare_splits
     from ytfakenews.evaluation import evaluate_classifier
-    from ytfakenews.predict import load_classifier
+    from ytfakenews.models import load_classifier
 
     _check_chunking(args)
+    # The model first: a broken model directory or a missing extra fails before the
+    # dataset is read.
+    classifier = load_classifier(args.model, device=args.device)
     manifest = read_manifest(args.model)
     data_path = args.data or Path(manifest.data.get("path", DEFAULT_DATA_PATH))
     split = SplitConfig(**manifest.data.get("split", {}))
@@ -593,7 +596,6 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     if manifest.data.get("sha256") not in (None, provenance["sha256"]):
         logger.warning("%s differs from the dataset this model was trained on", data_path)
     frame = splits.get(args.split)
-    classifier = load_classifier(args.model, device=args.device)
     metrics = evaluate_classifier(
         classifier,
         frame["text"].tolist(),
@@ -649,7 +651,7 @@ def _read_input_text(args: argparse.Namespace) -> str:
 
 
 def _cmd_predict(args: argparse.Namespace) -> int:
-    from ytfakenews.predict import load_classifier
+    from ytfakenews.models import load_classifier
 
     _check_chunking(args)
     text = _read_input_text(args)
@@ -697,7 +699,7 @@ def _cmd_transcribe(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    from ytfakenews.predict import load_classifier
+    from ytfakenews.models import load_classifier
 
     _check_chunking(args)
     _check_transcription_args(args)
