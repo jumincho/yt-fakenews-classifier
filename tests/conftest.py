@@ -34,6 +34,6 @@ def baseline_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
 @pytest.fixture
 def fake_youtube(monkeypatch: pytest.MonkeyPatch) -> FakeYouTube:
     fake = FakeYouTube()
-    monkeypatch.setattr("ytfakenews.transcribe._extract_info", fake.extract_info)
-    monkeypatch.setattr("ytfakenews.transcribe._load_whisper_model", fake.load_whisper_model)
+    monkeypatch.setattr("ytfakenews.asr.youtube._extract_info", fake.extract_info)
+    monkeypatch.setattr("ytfakenews.asr.whisper._load_whisper_model", fake.load_whisper_model)
     return fake

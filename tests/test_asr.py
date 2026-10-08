@@ -1,3 +1,8 @@
+"""Speech-to-text, at three levels: the package against fake yt-dlp and faster-whisper
+layers, the two boundary functions against stub modules and, with the asr extra, the
+real libraries against local files and a localhost HTTP server (still offline).
+"""
+
 from __future__ import annotations
 
 import functools
@@ -13,7 +18,8 @@ from typing import Any, ClassVar
 import pytest
 
 from tests.helpers import VIDEO, VIDEO_URL, FakeYouTube, import_or_skip, write_tone
-from ytfakenews import transcribe as tr
+from ytfakenews import asr
+from ytfakenews.asr import whisper, youtube
 from ytfakenews.errors import MissingDependencyError, TranscriptionError
 from ytfakenews.text import Segment, parse_srt
 
@@ -21,7 +27,7 @@ from ytfakenews.text import Segment, parse_srt
 
 
 def test_download_audio_requests_audio_only(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
-    result = tr.download_audio(VIDEO_URL, tmp_path)
+    result = asr.download_audio(VIDEO_URL, tmp_path)
     assert result.path == tmp_path / f"{VIDEO['id']}.webm"
     assert result.path.is_file()
     assert result.video.title == "Evening news"
@@ -35,7 +41,7 @@ def test_download_audio_requests_audio_only(fake_youtube: FakeYouTube, tmp_path:
 
 def test_transcribe_collects_segments(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
     audio = write_tone(tmp_path / "clip.wav")
-    transcript = tr.transcribe(audio, model_size="tiny", device="cpu")
+    transcript = asr.transcribe(audio, model_size="tiny", device="cpu")
 
     assert transcript.segments == (
         Segment(0.0, 4.0, "Good evening, officials said today."),
@@ -53,7 +59,7 @@ def test_transcribe_collects_segments(fake_youtube: FakeYouTube, tmp_path: Path)
 
 def test_transcribe_can_translate(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
     fake_youtube.spoken_language = "ko"
-    transcript = tr.transcribe(write_tone(tmp_path / "clip.wav"), language="ko", translate=True)
+    transcript = asr.transcribe(write_tone(tmp_path / "clip.wav"), language="ko", translate=True)
     assert transcript.language == "en"
     assert transcript.details["spoken_language"] == "ko"
     assert fake_youtube.whisper_calls[0][1]["task"] == "translate"
@@ -65,24 +71,24 @@ def test_transcription_errors_are_reported(fake_youtube: FakeYouTube, tmp_path: 
 
     fake_youtube._transcribe = undecodable
     with pytest.raises(TranscriptionError, match=r"could not transcribe .*clip\.wav: Invalid data"):
-        tr.transcribe(write_tone(tmp_path / "clip.wav"))
+        asr.transcribe(write_tone(tmp_path / "clip.wav"))
 
 
 def test_transcribe_source_for_a_url(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
-    transcript, files = tr.transcribe_source(VIDEO_URL, output_dir=tmp_path)
+    transcript, files = asr.transcribe_source(VIDEO_URL, output_dir=tmp_path)
     assert transcript.video is not None
     assert transcript.video.id == VIDEO["id"]
     assert files.txt == tmp_path / f"{VIDEO['id']}.txt"
     # The audio went to a temporary directory and is gone.
     assert sorted(path.suffix for path in tmp_path.iterdir()) == [".json", ".srt", ".txt"]
 
-    tr.transcribe_source(VIDEO_URL, output_dir=tmp_path, keep_audio=True)
+    asr.transcribe_source(VIDEO_URL, output_dir=tmp_path, keep_audio=True)
     assert (tmp_path / f"{VIDEO['id']}.webm").is_file()
 
 
 def test_transcribe_source_for_a_local_file(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
     audio = write_tone(tmp_path / "interview.wav")
-    transcript, files = tr.transcribe_source(str(audio), output_dir=tmp_path / "out")
+    transcript, files = asr.transcribe_source(str(audio), output_dir=tmp_path / "out")
     assert transcript.video is None
     assert files.srt.name == "interview.srt"
     assert fake_youtube.extract_calls == []
@@ -90,14 +96,14 @@ def test_transcribe_source_for_a_local_file(fake_youtube: FakeYouTube, tmp_path:
 
 def test_transcribe_source_rejects_bad_sources(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
     with pytest.raises(TranscriptionError, match="neither an existing file nor"):
-        tr.transcribe_source("not-a-url", output_dir=tmp_path)
+        asr.transcribe_source("not-a-url", output_dir=tmp_path)
     audio = write_tone(tmp_path / "clip.wav")
     with pytest.raises(TranscriptionError, match="--captions needs a video URL"):
-        tr.transcribe_source(str(audio), output_dir=tmp_path, captions=True)
+        asr.transcribe_source(str(audio), output_dir=tmp_path, captions=True)
 
 
 def test_fetch_captions_uses_automatic_captions(fake_youtube: FakeYouTube) -> None:
-    transcript = tr.fetch_captions(VIDEO_URL)
+    transcript = asr.fetch_captions(VIDEO_URL)
     assert transcript.source == "captions"
     assert transcript.details == {"track": "en", "kind": "automatic", "machine_translated": False}
     assert transcript.text.splitlines() == [
@@ -113,7 +119,7 @@ def test_fetch_captions_uses_automatic_captions(fake_youtube: FakeYouTube) -> No
 
 def test_fetch_captions_prefers_manual_subtitles(fake_youtube: FakeYouTube) -> None:
     fake_youtube.manual_tracks = {"en-GB": "WEBVTT\n\n00:00.000 --> 00:02.000\nHand-made line\n"}
-    transcript = tr.fetch_captions(VIDEO_URL)
+    transcript = asr.fetch_captions(VIDEO_URL)
     assert transcript.details["track"] == "en-GB"
     assert transcript.details["kind"] == "manual"
     assert transcript.language == "en-GB"
@@ -123,24 +129,24 @@ def test_fetch_captions_prefers_manual_subtitles(fake_youtube: FakeYouTube) -> N
 def test_fetch_captions_flags_machine_translation(fake_youtube: FakeYouTube) -> None:
     vtt = "WEBVTT\n\n00:00.000 --> 00:02.000\nTranslated line\n"
     fake_youtube.automatic_tracks = {"ko-orig": vtt, "ko": vtt, "en": vtt}
-    transcript = tr.fetch_captions(VIDEO_URL)
+    transcript = asr.fetch_captions(VIDEO_URL)
     assert transcript.details == {"track": "en", "kind": "automatic", "machine_translated": True}
 
 
 def test_fetch_captions_without_matching_track(fake_youtube: FakeYouTube) -> None:
     with pytest.raises(TranscriptionError, match="no 'fr' captions"):
-        tr.fetch_captions(VIDEO_URL, language="fr")
+        asr.fetch_captions(VIDEO_URL, language="fr")
 
 
 def test_save_transcript_writes_three_files(tmp_path: Path) -> None:
-    transcript = tr.Transcript(
+    transcript = asr.Transcript(
         segments=(Segment(0.0, 1.5, "Hello"), Segment(1.5, 3.0, "world")),
         source="whisper",
         language="en",
         details={"model": "small"},
-        video=tr.VideoInfo(id="vid"),
+        video=asr.VideoInfo(id="vid"),
     )
-    files = tr.save_transcript(transcript, tmp_path, "a/b c")
+    files = asr.save_transcript(transcript, tmp_path, "a/b c")
     assert files.txt.name == "a_b_c.txt"
     assert files.txt.read_text(encoding="utf-8") == "Hello\nworld\n"
     assert parse_srt(files.srt.read_text(encoding="utf-8")) == list(transcript.segments)
@@ -187,7 +193,7 @@ def _stub_yt_dlp(info: dict[str, Any] | None = None, error: str | None = None) -
 def test_extract_info_calls_yt_dlp(monkeypatch: pytest.MonkeyPatch) -> None:
     stub = _stub_yt_dlp(info={"id": "x"})
     monkeypatch.setitem(sys.modules, "yt_dlp", stub)
-    info = tr._extract_info("https://example.com/v", {"format": "bestaudio"}, download=True)
+    info = youtube._extract_info("https://example.com/v", {"format": "bestaudio"}, download=True)
     assert info == {"id": "x", "url": "https://example.com/v", "download": True}
     params = stub.YoutubeDL.last_params
     assert params["format"] == "bestaudio"
@@ -198,7 +204,7 @@ def test_extract_info_calls_yt_dlp(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_extract_info_converts_download_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "yt_dlp", _stub_yt_dlp(error="ERROR: Video unavailable"))
     with pytest.raises(TranscriptionError, match=r"yt-dlp failed for u: Video unavailable$"):
-        tr._extract_info("u", {}, download=False)
+        youtube._extract_info("u", {}, download=False)
 
 
 def test_load_whisper_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -213,16 +219,16 @@ def test_load_whisper_model(monkeypatch: pytest.MonkeyPatch) -> None:
     stub = ModuleType("faster_whisper")
     stub.WhisperModel = whisper_model
     monkeypatch.setitem(sys.modules, "faster_whisper", stub)
-    assert tr._load_whisper_model("small", device="auto", compute_type="int8") == "model"
+    assert whisper._load_whisper_model("small", device="auto", compute_type="int8") == "model"
     assert created == [("small", {"device": "auto", "compute_type": "int8"})]
     with pytest.raises(TranscriptionError, match="CUDA driver not found"):
-        tr._load_whisper_model("broken", device="cuda", compute_type="auto")
+        whisper._load_whisper_model("broken", device="cuda", compute_type="auto")
 
 
 def test_missing_asr_extra_is_explained(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setitem(sys.modules, "yt_dlp", None)
     with pytest.raises(MissingDependencyError, match=r"'asr' dependencies") as info:
-        tr.download_audio(VIDEO_URL, tmp_path)
+        asr.download_audio(VIDEO_URL, tmp_path)
     assert 'pip install -e ".[asr]"' in str(info.value)
     assert isinstance(info.value, ImportError)
 
@@ -248,7 +254,7 @@ def local_media_server(tmp_path: Path) -> Iterator[str]:
 
 def test_real_yt_dlp_downloads_audio(local_media_server: str, tmp_path: Path) -> None:
     import_or_skip("yt_dlp")
-    result = tr.download_audio(f"{local_media_server}/tone.wav", tmp_path / "out")
+    result = asr.download_audio(f"{local_media_server}/tone.wav", tmp_path / "out")
     assert result.path.read_bytes() == (tmp_path / "media" / "tone.wav").read_bytes()
     assert result.video.id == "tone"
 

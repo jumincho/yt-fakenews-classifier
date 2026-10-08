@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ytfakenews import __version__
+from ytfakenews.asr import DEFAULT_TRANSCRIPT_DIR, DEFAULT_WHISPER_MODEL
 from ytfakenews.config import (
     DEFAULT_BASELINE_DIR,
     DEFAULT_DATA_PATH,
@@ -28,10 +29,9 @@ from ytfakenews.predict import (
     DEFAULT_THRESHOLD,
     Prediction,
 )
-from ytfakenews.transcribe import DEFAULT_OUTPUT_DIR, DEFAULT_WHISPER_MODEL
 
 if TYPE_CHECKING:
-    from ytfakenews.transcribe import Transcript, TranscriptFiles
+    from ytfakenews.asr import Transcript, TranscriptFiles
 
 __all__ = ["build_parser", "main"]
 
@@ -187,7 +187,7 @@ def _add_transcription_options(parser: argparse.ArgumentParser) -> None:
         "-o",
         "--output-dir",
         type=Path,
-        default=DEFAULT_OUTPUT_DIR,
+        default=DEFAULT_TRANSCRIPT_DIR,
         metavar="DIR",
         help="where to write <id>.txt, .srt and .json (default: %(default)s)",
     )
@@ -674,7 +674,7 @@ def _check_transcription_args(args: argparse.Namespace) -> None:
 
 
 def _transcribe(args: argparse.Namespace) -> tuple[Transcript, TranscriptFiles]:
-    from ytfakenews.transcribe import transcribe_source
+    from ytfakenews.asr import transcribe_source
 
     return transcribe_source(
         args.source,
