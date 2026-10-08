@@ -50,6 +50,10 @@ dependencies = [
 # yt-dlp's "default" extra adds yt-dlp-ejs and "deno" a JavaScript runtime; recent
 # yt-dlp releases need both for full YouTube support.
 asr = [
+  # PyAV 19 removed the metadata_errors argument that faster-whisper (1.2.1 and
+  # earlier) passes to av.open, so every transcription fails with a TypeError.
+  # Drop this bound once a faster-whisper release no longer passes it.
+  "av<19",
   "faster-whisper>=1.1",
   "yt-dlp[default,deno]>=2026.1.29",
 ]
