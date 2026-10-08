@@ -66,15 +66,13 @@ def test_transcribe_can_translate(fake_youtube: FakeYouTube, tmp_path: Path) -> 
 
 
 def test_transcription_errors_are_reported(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
-    def undecodable(audio: str, **kwargs: Any) -> Any:
-        raise ValueError("Invalid data found when processing input")
-
-    fake_youtube._transcribe = undecodable
+    fake_youtube.transcribe_error = ValueError("Invalid data found when processing input")
     with pytest.raises(TranscriptionError, match=r"could not transcribe .*clip\.wav: Invalid data"):
         asr.transcribe(write_tone(tmp_path / "clip.wav"))
 
 
-def test_transcribe_source_for_a_url(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
+@pytest.mark.usefixtures("fake_youtube")
+def test_transcribe_source_for_a_url(tmp_path: Path) -> None:
     transcript, files = asr.transcribe_source(VIDEO_URL, output_dir=tmp_path)
     assert transcript.video is not None
     assert transcript.video.id == VIDEO["id"]
@@ -94,7 +92,8 @@ def test_transcribe_source_for_a_local_file(fake_youtube: FakeYouTube, tmp_path:
     assert fake_youtube.extract_calls == []
 
 
-def test_transcribe_source_rejects_bad_sources(fake_youtube: FakeYouTube, tmp_path: Path) -> None:
+@pytest.mark.usefixtures("fake_youtube")
+def test_transcribe_source_rejects_bad_sources(tmp_path: Path) -> None:
     with pytest.raises(TranscriptionError, match="neither an existing file nor"):
         asr.transcribe_source("not-a-url", output_dir=tmp_path)
     audio = write_tone(tmp_path / "clip.wav")
@@ -133,7 +132,8 @@ def test_fetch_captions_flags_machine_translation(fake_youtube: FakeYouTube) -> 
     assert transcript.details == {"track": "en", "kind": "automatic", "machine_translated": True}
 
 
-def test_fetch_captions_without_matching_track(fake_youtube: FakeYouTube) -> None:
+@pytest.mark.usefixtures("fake_youtube")
+def test_fetch_captions_without_matching_track() -> None:
     with pytest.raises(TranscriptionError, match="no 'fr' captions"):
         asr.fetch_captions(VIDEO_URL, language="fr")
 
@@ -185,8 +185,7 @@ def _stub_yt_dlp(info: dict[str, Any] | None = None, error: str | None = None) -
         def sanitize_info(value: dict[str, Any]) -> dict[str, Any]:
             return value
 
-    module.YoutubeDL = YoutubeDL
-    module.utils = SimpleNamespace(DownloadError=DownloadError)
+    vars(module).update(YoutubeDL=YoutubeDL, utils=SimpleNamespace(DownloadError=DownloadError))
     return module
 
 
@@ -217,7 +216,7 @@ def test_load_whisper_model(monkeypatch: pytest.MonkeyPatch) -> None:
         return "model"
 
     stub = ModuleType("faster_whisper")
-    stub.WhisperModel = whisper_model
+    vars(stub).update(WhisperModel=whisper_model)
     monkeypatch.setitem(sys.modules, "faster_whisper", stub)
     assert whisper._load_whisper_model("small", device="auto", compute_type="int8") == "model"
     assert created == [("small", {"device": "auto", "compute_type": "int8"})]
@@ -236,14 +235,18 @@ def test_missing_asr_extra_is_explained(monkeypatch: pytest.MonkeyPatch, tmp_pat
 # --------------------------------------------------- real libraries, still offline
 
 
+class _QuietRequestHandler(SimpleHTTPRequestHandler):
+    def log_message(self, format: str, *args: Any) -> None:
+        """Keep the request log out of the test output."""
+
+
 @pytest.fixture
 def local_media_server(tmp_path: Path) -> Iterator[str]:
     """Serve ``tmp_path/media`` over HTTP on localhost."""
     media = tmp_path / "media"
     media.mkdir()
     write_tone(media / "tone.wav")
-    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(media))
-    handler.log_message = lambda *args: None
+    handler = functools.partial(_QuietRequestHandler, directory=str(media))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

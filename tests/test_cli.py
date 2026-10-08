@@ -260,11 +260,9 @@ def test_transcribe_captions(
     assert fake_youtube.whisper_loads == []
 
 
+@pytest.mark.usefixtures("fake_youtube")
 def test_run_prints_video_transcript_and_prediction(
-    capsys: pytest.CaptureFixture[str],
-    fake_youtube: FakeYouTube,
-    baseline_dir: Path,
-    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str], baseline_dir: Path, tmp_path: Path
 ) -> None:
     code, out, _ = run_cli(
         capsys, "run", VIDEO_URL, "--model", str(baseline_dir), "-o", str(tmp_path)
@@ -277,12 +275,8 @@ def test_run_prints_video_transcript_and_prediction(
     assert lines[4].startswith("REAL  P(fake) = ")
 
 
-def test_run_json(
-    capsys: pytest.CaptureFixture[str],
-    fake_youtube: FakeYouTube,
-    baseline_dir: Path,
-    tmp_path: Path,
-) -> None:
+@pytest.mark.usefixtures("fake_youtube")
+def test_run_json(capsys: pytest.CaptureFixture[str], baseline_dir: Path, tmp_path: Path) -> None:
     code, out, _ = run_cli(
         capsys, "run", VIDEO_URL, "--model", str(baseline_dir), "-o", str(tmp_path), "--json"
     )

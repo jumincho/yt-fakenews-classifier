@@ -8,7 +8,9 @@ training, saving, loading and prediction plumbing works, not model quality.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -16,7 +18,37 @@ import pytest
 
 from tests.helpers import import_or_skip, make_news_frame, write_zipped_csv
 from ytfakenews.cli import main
-from ytfakenews.models.transformer import truncate_head_tail
+from ytfakenews.models.transformer import (
+    HeadTailEncoder,
+    _trainer_metrics,
+    special_affixes,
+    truncate_head_tail,
+)
+
+
+class WordTokenizer:
+    """Stands in for a Hugging Face tokenizer: one id per word, wrapped in ids 1 and 2.
+
+    Ids are the words' positions in ``vocabulary``, offset by 10, which keeps them
+    apart from the two special tokens.
+    """
+
+    def __init__(self, vocabulary: Sequence[str]) -> None:
+        self.ids = {word: 10 + index for index, word in enumerate(vocabulary)}
+
+    def __call__(
+        self, texts: str | list[str], *, add_special_tokens: bool = True, verbose: bool = True
+    ) -> dict[str, Any]:
+        def encode(text: str) -> list[int]:
+            ids = [self.ids[word] for word in text.split()]
+            return [1, *ids, 2] if add_special_tokens else ids
+
+        if isinstance(texts, str):
+            return {"input_ids": encode(texts)}
+        return {"input_ids": [encode(text) for text in texts]}
+
+
+WORDS = "a short probe text w0 w1 w2 w3 w4 w5 w6 w7".split()
 
 
 def test_truncate_head_tail() -> None:
@@ -26,6 +58,45 @@ def test_truncate_head_tail() -> None:
     assert truncate_head_tail(ids, 0, 3) == [7, 8, 9]
     assert truncate_head_tail(ids, 6, 4) == ids
     assert truncate_head_tail(ids[:3], 2, 2) == [0, 1, 2]
+
+
+def test_special_affixes_are_found_by_probing() -> None:
+    assert special_affixes(WordTokenizer(WORDS)) == ([1], [2])
+
+
+def test_head_tail_encoder_keeps_the_start_and_the_end() -> None:
+    tokenizer = WordTokenizer(WORDS)
+    encoder = HeadTailEncoder(tokenizer, max_length=6, head_tokens=1)  # 4 text tokens
+    long, short = encoder.encode(["w0 w1 w2 w3 w4 w5 w6 w7", "w0 w1"])
+    ids = tokenizer.ids
+    assert long == [1, ids["w0"], ids["w5"], ids["w6"], ids["w7"], 2]
+    assert short == [1, ids["w0"], ids["w1"], 2]
+
+
+@pytest.mark.parametrize(
+    ("max_length", "head_tokens", "message"),
+    [(2, 0, "leaves no room"), (6, 5, "head_tokens must be between 0 and 4")],
+)
+def test_head_tail_encoder_validates_its_budget(
+    max_length: int, head_tokens: int, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        HeadTailEncoder(WordTokenizer(WORDS), max_length=max_length, head_tokens=head_tokens)
+
+
+def test_trainer_metrics_turn_logits_into_the_shared_metrics() -> None:
+    logits = np.array([[2.0, 0.0], [0.0, 2.0], [1.0, 0.0], [0.0, 3.0]])  # REAL, FAKE columns
+    prediction = SimpleNamespace(predictions=(logits,), label_ids=np.array([0, 1, 1, 1]))
+    metrics = _trainer_metrics(prediction)
+    assert metrics == {
+        "accuracy": 0.75,
+        "precision": 1.0,
+        "recall": pytest.approx(2 / 3),
+        "f1": 0.8,
+        "roc_auc": 1.0,
+    }
+    single_class = SimpleNamespace(predictions=logits, label_ids=np.array([1, 1, 1, 1]))
+    assert "roc_auc" not in _trainer_metrics(single_class)
 
 
 # ------------------------------------------------------------------ with the extra
@@ -106,7 +177,6 @@ def trained_transformer(
 
 def test_head_tail_encoder(tiny_base_model: Path) -> None:
     transformers = import_or_skip("transformers")
-    from ytfakenews.models.transformer import HeadTailEncoder, special_affixes
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(str(tiny_base_model))
     cls_id, sep_id = tokenizer.cls_token_id, tokenizer.sep_token_id

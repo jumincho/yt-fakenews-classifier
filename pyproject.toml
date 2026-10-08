@@ -125,7 +125,7 @@ select = [
 known-first-party = ["tests", "ytfakenews"]
 
 [tool.mypy]
-files = ["src/ytfakenews"]
+files = ["src/ytfakenews", "tests"]
 strict = true
 warn_unreachable = true
 pretty = true

@@ -29,7 +29,8 @@ def import_or_skip(module: str) -> ModuleType:
     """
     if os.environ.get("YTFAKENEWS_REQUIRE_EXTRAS") == "1":
         return importlib.import_module(module)
-    return pytest.importorskip(module)
+    imported: ModuleType = pytest.importorskip(module)
+    return imported
 
 
 _REAL_WORDS = (
@@ -81,10 +82,12 @@ VIDEO_URL = VIDEO["webpage_url"]
 
 
 class FakeYouTube:
-    """Replaces ``_extract_info`` (yt-dlp) and ``_load_whisper_model`` (faster-whisper).
+    """Stands in for yt-dlp and faster-whisper behind the package's two boundaries.
 
-    It mimics what the real libraries return and write to disk and records every
-    call, so tests can check which options the package passed.
+    It replaces ``ytfakenews.asr.youtube._extract_info`` and
+    ``ytfakenews.asr.whisper._load_whisper_model``, mimics what the real libraries
+    return and write to disk, and records every call, so tests can check which options
+    the package passed. Set ``transcribe_error`` to make transcription fail.
     """
 
     def __init__(self) -> None:
@@ -97,6 +100,7 @@ class FakeYouTube:
             SimpleNamespace(start=4.0, end=8.0, text="   "),
             SimpleNamespace(start=8.0, end=12.0, text=" The committee report is out."),
         ]
+        self.transcribe_error: Exception | None = None
         self.extract_calls: list[tuple[str, dict[str, Any], bool]] = []
         self.whisper_loads: list[dict[str, Any]] = []
         self.whisper_calls: list[tuple[str, dict[str, Any]]] = []
@@ -136,6 +140,8 @@ class FakeYouTube:
 
     def _transcribe(self, audio: str, **kwargs: Any) -> tuple[Iterator[Any], Any]:
         self.whisper_calls.append((audio, kwargs))
+        if self.transcribe_error is not None:
+            raise self.transcribe_error
         info = SimpleNamespace(
             language=self.spoken_language, language_probability=0.9871, duration=12.0
         )
